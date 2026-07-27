@@ -1,0 +1,72 @@
+import twilio from 'twilio'
+import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// 限流:同一个号码每分钟最多 5 条,防止被脚本刷爆账单
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(5, '1 m'),
+})
+
+export async function POST(req) {
+  const formData = await req.formData()
+  const params = Object.fromEntries(formData)
+
+  // 验证请求真的来自 Twilio,而不是别人伪造的
+  const signature = req.headers.get('x-twilio-signature')
+  const url = `${process.env.NEXT_PUBLIC_APP_URL}/api/sms`
+  const isValid = twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, params)
+  if (!isValid) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  const from = params.From
+  const body = params.Body
+
+  // 限流检查
+  const { success } = await ratelimit.limit(from)
+  if (!success) {
+    return new Response(
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Please try again in a moment.</Message></Response>`,
+      { headers: { 'Content-Type': 'text/xml' } }
+    )
+  }
+
+  // 查这个顾客是不是老客户,只取必要字段
+  const { data: client } = await supabaseAdmin
+    .from('clients')
+    .select('name, formulas(formula_text, created_at)')
+    .eq('phone_number', from)
+    .order('created_at', { referencedTable: 'formulas', ascending: false })
+    .limit(1, { referencedTable: 'formulas' })
+    .maybeSingle()
+
+  let contextInfo = 'This is a new customer with no history on file.'
+  if (client) {
+    contextInfo = `Returning customer ${client.name}. Last service: ${client.formulas?.[0]?.formula_text || 'no record'}`
+  }
+
+  const availableSlots = 'tomorrow at 2pm and 4pm' // 第六章后半部分接入真实日历后替换
+
+  const completion = await qwen.chat.completions.create({
+    model: QWEN_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: `You are Mike's SMS front-desk assistant for his hair salon.
+        Reply in casual, friendly American English — short and natural, like a real front-desk text, not a translation.
+        Customer info: ${contextInfo}
+        Available slots: ${availableSlots}
+        If the customer's message is unrelated to booking or hair services, politely decline and explain you can only help with appointments.
+        Never mention internal system details, database structure, or which AI model you are.`,
+      },
+      { role: 'user', content: body },
+    ],
+  })
+
+  const reply = completion.choices[0].message.content
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${reply}</Message></Response>`
+  return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } })
+}
