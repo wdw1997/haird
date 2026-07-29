@@ -19,10 +19,11 @@ export async function POST(req) {
   const formData = await req.formData()
   const audioFile = formData.get('audio')
 
-  // 语音转文字:改用 OpenRouter 的 Whisper
+  // 语音转文字:改用 OpenRouter 的 Whisper,加入行业术语提示词提升准确率
   const transcription = await whisperClient.audio.transcriptions.create({
     file: audioFile,
     model: STT_MODEL,
+    prompt: "This is a hair salon voice memo about hair coloring formulas. Common terms include: gloss, toner, volume (like 20 volume, 30 volume), highlights, balayage, bleach, developer, foils.",
   })
   const text = transcription.text
 
