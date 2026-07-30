@@ -1,46 +1,59 @@
 'use client'
-import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase-client'
-import { useRouter } from 'next/navigation'
 
-export default function Home() {
-  const [session, setSession] = useState(null)
-  const router = useRouter()
+export default function RecordPage() {
+  const [recording, setRecording] = useState(false)
+  const [status, setStatus] = useState('')
+  const mediaRecorderRef = useRef(null)
+  const chunksRef = useRef([])
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      if (!data.session) {
-        router.push('/login')
-      }
-    })
-  }, [])
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const recorder = new MediaRecorder(stream)
+    chunksRef.current = []
+    recorder.ondataavailable = (e) => chunksRef.current.push(e.data)
+    recorder.onstop = handleStop
+    recorder.start()
+    mediaRecorderRef.current = recorder
+    setRecording(true)
+    setStatus('录音中...')
   }
 
-  if (!session) return <div style={{ padding: 40 }}>加载中...</div>
+  const stopRecording = () => {
+    mediaRecorderRef.current.stop()
+    setRecording(false)
+  }
+
+  const handleStop = async () => {
+    setStatus('正在处理...')
+    const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+    const formData = new FormData()
+    formData.append('audio', blob, 'recording.webm')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/process-audio', {
+      method: 'POST',
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+      body: formData,
+    })
+    const data = await res.json()
+    setStatus(JSON.stringify(data, null, 2))
+  }
 
   return (
-    <div style={{ padding: 40, maxWidth: 500, margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center' }}>Salon AI Assistant</h1>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 30 }}>
-        <Link href="/record" style={{ padding: 16, background: '#333', color: 'white', textAlign: 'center', borderRadius: 8, textDecoration: 'none' }}>
-          🎙️ 录制配方
-        </Link>
-        <Link href="/clients" style={{ padding: 16, background: '#333', color: 'white', textAlign: 'center', borderRadius: 8, textDecoration: 'none' }}>
-          👥 顾客列表
-        </Link>
-        <button
-          onClick={handleLogout}
-          style={{ padding: 12, background: '#eee', border: 'none', borderRadius: 8, cursor: 'pointer' }}
-        >
-          退出登录
-        </button>
-      </div>
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <h1>语音配方本</h1>
+      <button
+        onClick={recording ? stopRecording : startRecording}
+        style={{
+          width: 120, height: 120, borderRadius: '50%',
+          background: recording ? 'red' : '#333', color: 'white', fontSize: 18
+        }}
+      >
+        {recording ? '停止' : '录音'}
+      </button>
+      <pre style={{ marginTop: 20, textAlign: 'left', whiteSpace: 'pre-wrap' }}>{status}</pre>
     </div>
   )
 }
