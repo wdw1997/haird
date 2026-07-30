@@ -1,10 +1,9 @@
 import twilio from 'twilio'
-import { openrouter, CHAT_MODEL } from '@/lib/qwen-client'
+import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// 限流:同一个号码每分钟最多 5 条
 const ratelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   limiter: Ratelimit.slidingWindow(5, '1 m'),
@@ -14,7 +13,6 @@ export async function POST(req) {
   const formData = await req.formData()
   const params = Object.fromEntries(formData)
 
-  // 验证请求真的来自 Twilio
   const signature = req.headers.get('x-twilio-signature')
   const url = `${process.env.NEXT_PUBLIC_APP_URL}/api/sms`
   const isValid = twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, params)
@@ -25,7 +23,6 @@ export async function POST(req) {
   const from = params.From
   const body = params.Body
 
-  // 限流检查
   const { success } = await ratelimit.limit(from)
   if (!success) {
     return new Response(
@@ -34,7 +31,6 @@ export async function POST(req) {
     )
   }
 
-  // 🆕 查这个号码是不是已有顾客记录,查不到就自动创建一条新的
   let { data: client } = await supabaseAdmin
     .from('clients')
     .select('id, name, formulas(formula_text, created_at)')
@@ -46,8 +42,6 @@ export async function POST(req) {
   let isNewClient = false
 
   if (!client) {
-    // 找到当前系统里第一个理发师(测试阶段简化处理;正式多理发师上线后,
-    // 应该按这个 Twilio 号码对应哪个理发师的 twilio_number 来关联,而不是固定取第一个)
     const { data: stylist } = await supabaseAdmin
       .from('stylists')
       .select('id')
@@ -60,7 +54,7 @@ export async function POST(req) {
         .insert({
           stylist_id: stylist.id,
           phone_number: from,
-          name: null, // 名字暂时留空,后面可以在语音配方本里补充,或者顾客自己说了名字后由 AI 提取回填
+          name: null,
         })
         .select('id, name')
         .single()
@@ -79,10 +73,10 @@ export async function POST(req) {
     contextInfo = `Returning customer ${client.name || 'unknown name'}. Last service: ${client.formulas?.[0]?.formula_text || 'no record'}`
   }
 
-  const availableSlots = 'tomorrow at 2pm and 4pm' // 第六章后半部分接入真实日历后替换
+  const availableSlots = 'tomorrow at 2pm and 4pm'
 
-  const completion = await openrouter.chat.completions.create({
-    model: CHAT_MODEL,
+  const completion = await qwen.chat.completions.create({
+    model: QWEN_MODEL,
     messages: [
       {
         role: 'system',
