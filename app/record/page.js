@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import Link from 'next/link'
 
 export default function RecordPage() {
   const [recording, setRecording] = useState(false)
@@ -17,7 +18,7 @@ export default function RecordPage() {
     recorder.start()
     mediaRecorderRef.current = recorder
     setRecording(true)
-    setStatus('录音中...')
+    setStatus('🔴 正在聆听...')
   }
 
   const stopRecording = () => {
@@ -26,7 +27,7 @@ export default function RecordPage() {
   }
 
   const handleStop = async () => {
-    setStatus('正在处理...')
+    setStatus('✨ AI 正在提取配方信息...')
     const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
     const formData = new FormData()
     formData.append('audio', blob, 'recording.webm')
@@ -38,22 +39,42 @@ export default function RecordPage() {
       body: formData,
     })
     const data = await res.json()
-    setStatus(JSON.stringify(data, null, 2))
+    setStatus(JSON.stringify(data.extracted, null, 2))
   }
 
   return (
-    <div style={{ padding: 40, textAlign: 'center' }}>
-      <h1>语音配方本</h1>
-      <button
-        onClick={recording ? stopRecording : startRecording}
-        style={{
-          width: 120, height: 120, borderRadius: '50%',
-          background: recording ? 'red' : '#333', color: 'white', fontSize: 18
-        }}
-      >
-        {recording ? '停止' : '录音'}
-      </button>
-      <pre style={{ marginTop: 20, textAlign: 'left', whiteSpace: 'pre-wrap' }}>{status}</pre>
+    <div className="min-h-screen bg-gray-50 px-6 py-12 flex flex-col items-center">
+      <div className="w-full max-w-md">
+        <Link href="/" className="text-sm text-gray-500 hover:text-black mb-8 inline-block">
+          &larr; 返回首页
+        </Link>
+        
+        <div className="flex flex-col items-center justify-center mt-12">
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            className={`flex h-40 w-40 items-center justify-center rounded-full text-xl font-bold text-white shadow-2xl transition-all duration-300 ${
+              recording 
+                ? 'bg-red-500 animate-pulse scale-110 shadow-red-500/50' 
+                : 'bg-black hover:scale-105 hover:bg-gray-800'
+            }`}
+          >
+            {recording ? '停止' : '开始录音'}
+          </button>
+          
+          <div className="mt-12 w-full">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">处理状态</h3>
+            <div className="min-h-[150px] w-full rounded-2xl bg-white p-5 shadow-sm border border-gray-100 overflow-auto">
+              {status ? (
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+                  {status}
+                </pre>
+              ) : (
+                <p className="text-sm text-gray-400 text-center mt-10">点击上方按钮说出您的配方</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
