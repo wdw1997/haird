@@ -34,6 +34,9 @@ export default function Home() {
         <Link href="/clients" style={{ padding: 16, background: '#333', color: 'white', textAlign: 'center', borderRadius: 8, textDecoration: 'none' }}>
           👥 顾客列表
         </Link>
+        <a href="/api/google/auth" style={{ padding: 16, background: '#4285F4', color: 'white', textAlign: 'center', borderRadius: 8, textDecoration: 'none' }}>
+  📅 连接 Google 日历
+</a>
         <button
           onClick={handleLogout}
           style={{ padding: 12, background: '#eee', border: 'none', borderRadius: 8, cursor: 'pointer' }}
