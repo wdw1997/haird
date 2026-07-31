@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const plan = searchParams.get('plan')       // 'pro' 或 'team'
