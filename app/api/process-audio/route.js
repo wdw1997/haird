@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { whisperClient, STT_MODEL } from '@/lib/whisper-client'
 import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
 import { supabaseAdmin } from '@/lib/supabase-admin'
