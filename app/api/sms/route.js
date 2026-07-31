@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import twilio from 'twilio'
 import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
 import { Ratelimit } from '@upstash/ratelimit'
