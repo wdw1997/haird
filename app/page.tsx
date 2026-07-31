@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import { useRouter } from 'next/navigation'
-import { buildCreemCheckoutUrl } from '@/lib/creem-client'
+
 
 export default function Home() {
   const [session, setSession] = useState<any>(undefined)
@@ -36,8 +36,8 @@ export default function Home() {
 
   // 2. 已登录：显示理发师控制台 (Dashboard)
   if (session) {
-    const proUrl = stylist ? buildCreemCheckoutUrl(stylist.id, 'pro') : '#'
-    const teamUrl = stylist ? buildCreemCheckoutUrl(stylist.id, 'team') : '#'
+const proUrl = stylist ? `/api/checkout?plan=pro&stylist=${stylist.id}` : '#'
+const teamUrl = stylist ? `/api/checkout?plan=team&stylist=${stylist.id}` : '#'
 
     return (
       <div className="min-h-screen bg-gray-50 px-6 py-10">
