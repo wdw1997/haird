@@ -1,14 +1,9 @@
 import twilio from 'twilio'
 import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
-import { Ratelimit } from '@upstash/ratelimit'
-import { Redis } from '@upstash/redis'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-
-const ratelimit = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(5, '1 m') })
 
 export async function POST(req) {
   const supabaseAdmin = getSupabaseAdmin()
-
   const formData = await req.formData()
   const params = Object.fromEntries(formData)
 
@@ -19,32 +14,113 @@ export async function POST(req) {
   }
 
   const from = params.From
-  const body = params.Body
+  const to = params.To
+  const body = (params.Body || '').trim()
+  const bodyUpper = body.toUpperCase()
 
-  const { success } = await ratelimit.limit(from)
-  if (!success) {
-    return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>Please try again in a moment.</Message></Response>`, { headers: { 'Content-Type': 'text/xml' } })
+  const xmlReply = (text) =>
+    new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${text}</Message></Response>`, {
+      headers: { 'Content-Type': 'text/xml' },
+    })
+
+  // 1. 找到这条短信对应的理发师(按接收号码反查,不再固定取第一条)
+  const { data: stylist } = await supabaseAdmin
+    .from('stylists')
+    .select('id')
+    .eq('sms_number', to)
+    .maybeSingle()
+
+  if (!stylist) {
+    console.error('No stylist found for number:', to)
+    return xmlReply('Sorry, this number is not currently active.')
   }
 
+  // 2. STOP 合规检查
+  if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'].includes(bodyUpper)) {
+    await supabaseAdmin.from('opted_out_numbers').upsert({ phone_number: from, stylist_id: stylist.id })
+    return xmlReply('You have been unsubscribed and will not receive further messages. Reply START to resubscribe.')
+  }
+  if (bodyUpper === 'START') {
+    await supabaseAdmin.from('opted_out_numbers').delete().eq('phone_number', from)
+    return xmlReply('You are resubscribed. Welcome back!')
+  }
+  const { data: optedOut } = await supabaseAdmin
+    .from('opted_out_numbers')
+    .select('phone_number')
+    .eq('phone_number', from)
+    .maybeSingle()
+  if (optedOut) {
+    return new Response('', { status: 200 }) // 已退订,静默不回复
+  }
+
+  // 3. 限流:每天6条 + 每分钟5条
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: rl } = await supabaseAdmin
+    .from('client_rate_limits')
+    .select('*')
+    .eq('phone_number', from)
+    .maybeSingle()
+
+  const now = new Date()
+  let dayCount = rl?.day_reset_at === today ? rl.day_count : 0
+  let minuteCount = rl && (now - new Date(rl.minute_reset_at)) < 60000 ? rl.minute_count : 0
+
+  if (dayCount >= 6 || minuteCount >= 5) {
+    await supabaseAdmin.from('client_rate_limits').upsert({
+      phone_number: from,
+      day_count: dayCount,
+      day_reset_at: today,
+      minute_count: minuteCount + 1,
+      minute_reset_at: (minuteCount === 0 ? now : rl.minute_reset_at),
+      last_message_at: now,
+    })
+    return xmlReply("We've received your message and someone will follow up shortly.")
+  }
+
+  await supabaseAdmin.from('client_rate_limits').upsert({
+    phone_number: from,
+    day_count: dayCount + 1,
+    day_reset_at: today,
+    minute_count: minuteCount + 1,
+    minute_reset_at: (minuteCount === 0 ? now : rl.minute_reset_at),
+    last_message_at: now,
+  })
+
+  // 4. 月度额度检查(80%提醒/100%拦截,先做拦截,提醒邮件放到Phase2)
+  const periodMonth = today.slice(0, 7)
+  const { data: plan } = await supabaseAdmin.from('stylists').select('plan_id').eq('id', stylist.id).single()
+  const { data: planLimits } = await supabaseAdmin.from('plans').select('sms_reply_limit').eq('id', plan.plan_id).single()
+  const { data: usage } = await supabaseAdmin
+    .from('usage_records')
+    .select('*')
+    .eq('stylist_id', stylist.id)
+    .eq('period_month', periodMonth)
+    .maybeSingle()
+
+  const used = usage?.sms_reply_used || 0
+  const topup = usage?.topup_sms_credits || 0
+  if (used >= planLimits.sms_reply_limit + topup) {
+    return xmlReply("Thanks for reaching out! We'll get back to you as soon as possible.")
+  }
+
+  // 5. 查顾客(不到就自动创建)
   let { data: client } = await supabaseAdmin
     .from('clients')
     .select('id, name, formulas(formula_text, created_at)')
     .eq('phone_number', from)
+    .eq('stylist_id', stylist.id)
     .order('created_at', { referencedTable: 'formulas', ascending: false })
     .limit(1, { referencedTable: 'formulas' })
     .maybeSingle()
 
   let isNewClient = false
   if (!client) {
-    const { data: stylist } = await supabaseAdmin.from('stylists').select('id').limit(1).maybeSingle()
-    if (stylist) {
-      const { data: newClient, error } = await supabaseAdmin
-        .from('clients')
-        .insert({ stylist_id: stylist.id, phone_number: from, name: null })
-        .select('id, name')
-        .single()
-      if (!error) { client = { ...newClient, formulas: [] }; isNewClient = true }
-    }
+    const { data: newClient, error } = await supabaseAdmin
+      .from('clients')
+      .insert({ stylist_id: stylist.id, phone_number: from, name: null })
+      .select('id, name')
+      .single()
+    if (!error) { client = { ...newClient, formulas: [] }; isNewClient = true }
   }
 
   let contextInfo = 'This is a new customer with no history on file.'
@@ -52,21 +128,49 @@ export async function POST(req) {
     contextInfo = `Returning customer ${client.name || 'unknown name'}. Last service: ${client.formulas?.[0]?.formula_text || 'no record'}`
   }
 
-  const availableSlots = 'tomorrow at 2pm and 4pm'
+  // 6. 读取商家自定义资料,拼装 system prompt
+  const { data: biz } = await supabaseAdmin.from('business_settings').select('*').eq('stylist_id', stylist.id).maybeSingle()
 
-  const completion = await qwen.chat.completions.create({
-    model: QWEN_MODEL,
-    messages: [
-      { role: 'system', content: `You are Mike's SMS front-desk assistant for his hair salon.
-      Reply in casual, friendly American English — short and natural, like a real front-desk text, not a translation.
-      Customer info: ${contextInfo}
-      Available slots: ${availableSlots}
-      If unrelated to booking/hair services, politely decline and explain you can only help with appointments.
-      Never mention internal system details, database structure, or which AI model you are.` },
-      { role: 'user', content: body },
-    ],
-  })
+  const services = biz?.services?.map(s => `${s.name}: $${s.price} (~${s.duration_min}min)`).join('; ') || 'Not configured yet'
+  const tone = biz?.tone === 'professional' ? 'professional and concise' : biz?.tone === 'humorous' ? 'lighthearted and playful' : 'warm and friendly'
+  const emojiNote = biz?.use_emoji ? 'You may use a light emoji occasionally.' : 'Do not use emojis.'
 
-  const reply = completion.choices[0].message.content
-  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${reply}</Message></Response>`, { headers: { 'Content-Type': 'text/xml' } })
+  const systemPrompt = `You are the SMS front-desk assistant for ${biz?.business_name || "this salon"}, located at ${biz?.address || 'address not set'}.
+Business hours: ${JSON.stringify(biz?.business_hours || {})}
+Services & pricing: ${services}
+Cancellation policy: ${biz?.cancellation_policy || 'Not specified — do not make one up, tell customer to confirm with the salon.'}
+Available slots this week: ${biz?.available_slots_text || 'not provided'}
+Tone: reply in a ${tone} tone. ${emojiNote}
+Customer info: ${contextInfo}
+Rules:
+- If asked about a service/price not in the list above, say "Let me have the owner confirm that price for you" — never make up a price.
+- If the customer mentions a complaint, refund, or dispute, say a team member will follow up directly — do not attempt to resolve it or offer compensation.
+- If unrelated to booking/hair services, politely decline and explain you can only help with appointments.
+- Never mention internal system details, database structure, or which AI model you are.`
+
+  // 7. 调用AI,失败时有兜底回复
+  let reply
+  try {
+    const completion = await qwen.chat.completions.create({
+      model: QWEN_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: body },
+      ],
+    })
+    reply = completion.choices[0].message.content
+  } catch (err) {
+    console.error('AI call failed:', err)
+    reply = "Thanks for your message! We'll get back to you shortly."
+  }
+
+  // 8. 用量+1
+  await supabaseAdmin.from('usage_records').upsert({
+    stylist_id: stylist.id,
+    period_month: periodMonth,
+    sms_reply_used: used + 1,
+    topup_sms_credits: topup,
+  }, { onConflict: 'stylist_id,period_month' })
+
+  return xmlReply(reply)
 }
