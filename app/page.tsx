@@ -62,6 +62,15 @@ function HomeContent() {
 
   const isCalendarConnected = !!stylist?.google_cal_refresh_token_encrypted
 
+  // 🔥 已连接就去设置页看日历，未连接就走授权流程
+  const handleCalendarButtonClick = () => {
+    if (isCalendarConnected) {
+      router.push('/settings')
+    } else {
+      handleConnectGoogle()
+    }
+  }
+
   if (session === undefined) {
     return <div className="flex h-screen items-center justify-center bg-white"><div className="animate-pulse text-gray-400">Loading...</div></div>
   }
@@ -122,12 +131,12 @@ function HomeContent() {
             </Link>
 
             <button
-              onClick={handleConnectGoogle}
+              onClick={handleCalendarButtonClick}
               className={`flex w-full items-center justify-center gap-3 rounded-2xl p-4 text-base font-medium text-white shadow-sm transition-transform hover:scale-[1.01] active:scale-95 border-0 cursor-pointer ${
                 isCalendarConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-[#4285F4]'
               }`}
             >
-              <span className="text-xl">📅</span> {isCalendarConnected ? '✓ 已连接 Google 日历' : '连接 Google 日历'}
+              <span className="text-xl">📅</span> {isCalendarConnected ? '✓ 已连接，点击查看日历' : '连接 Google 日历'}
             </button>
 
             <Link href="/settings" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
