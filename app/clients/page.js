@@ -1,32 +1,55 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase-client'
+import { google } from 'googleapis'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
-export default function ClientsPage() {
-  const [clients, setClients] = useState([])
+export async function GET(req) {
+  const supabaseAdmin = getSupabaseAdmin()
+  const { searchParams } = new URL(req.url)
+  const code = searchParams.get('code')
+  const stylistId = searchParams.get('state')
+  const errorParam = searchParams.get('error') // 用户在Google那边点了取消
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: stylist } = await supabase.from('stylists').select('id').eq('auth_user_id', user.id).maybeSingle()
-      if (!stylist) return
-      const { data } = await supabase.from('clients').select('*, formulas(*)').eq('stylist_id', stylist.id)
-      setClients(data || [])
-    })()
-  }, [])
+  const redirectBase = process.env.NEXT_PUBLIC_APP_URL || 'https://www.veloceia.com'
 
-  return (
-    <div style={{ padding: 40 }}>
-      <h1>Client List</h1>
-      {clients.map((c) => (
-        <div key={c.id} style={{ border: '1px solid #ddd', padding: 12, marginTop: 12, borderRadius: 8 }}>
-          <strong>{c.name || c.phone_number}</strong>
-          <div style={{ fontSize: 14, color: '#666' }}>
-            Formula history: {c.formulas?.map((f) => f.formula_text).join(', ') || 'None yet'}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+  if (errorParam) {
+    return Response.redirect(`${redirectBase}/?calendar=cancelled`)
+  }
+  if (!stylistId || !code) {
+    return new Response('授权参数缺失，请重新从设置页发起授权', { status: 400 })
+  }
+
+  const { data: stylist } = await supabaseAdmin.from('stylists').select('id').eq('id', stylistId).maybeSingle()
+  if (!stylist) {
+    return new Response('未找到对应账号', { status: 404 })
+  }
+
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID, 
+      process.env.GOOGLE_CLIENT_SECRET, 
+      process.env.GOOGLE_REDIRECT_URI
+    )
+    const { tokens } = await oauth2Client.getToken(code)
+    const refreshToken = tokens.refresh_token
+
+    if (!refreshToken) {
+      console.error('Google未返回refresh_token，stylist:', stylistId)
+      return Response.redirect(`${redirectBase}/?calendar=no_refresh_token`)
+    }
+
+    const { error: rpcError } = await supabaseAdmin.rpc('encrypt_and_store_token', {
+      p_stylist_id: stylist.id,
+      p_token: refreshToken,
+      p_key: process.env.TOKEN_ENCRYPTION_KEY,
+    })
+
+    if (rpcError) {
+      console.error('存储token失败:', rpcError)
+      return Response.redirect(`${redirectBase}/?calendar=save_failed`)
+    }
+
+    return Response.redirect(`${redirectBase}/?calendar=connected`)
+  } catch (err) {
+    console.error('Google OAuth callback失败:', err)
+    return Response.redirect(`${redirectBase}/?calendar=error`)
+  }
 }
