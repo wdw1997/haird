@@ -29,7 +29,7 @@ export async function POST(req) {
   const { data: stylist } = await supabaseAdmin
     .from('stylists')
     .select('*')
-    .eq('sms_number', to)
+    .eq('twilio_number', to)
     .maybeSingle()
 
   if (!stylist) {
