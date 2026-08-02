@@ -62,7 +62,6 @@ function HomeContent() {
 
   const isCalendarConnected = !!stylist?.google_cal_refresh_token_encrypted
 
-  // 🔥 已连接就去设置页看日历，未连接就走授权流程
   const handleCalendarButtonClick = () => {
     if (isCalendarConnected) {
       router.push('/settings')
@@ -104,19 +103,19 @@ function HomeContent() {
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>🎙️ 语音配方识别</span>
-                  <span>{stylist?.voice_used || 0} / {stylist?.voice_limit || 10} 次</span>
+                  <span>{stylist?.voice_used || 0} / {stylist?.voice_limit || 3} 次</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-black transition-all" style={{ width: `${Math.min(100, ((stylist?.voice_used || 0) / (stylist?.voice_limit || 10)) * 100)}%` }} />
+                  <div className="h-full bg-black transition-all" style={{ width: `${Math.min(100, ((stylist?.voice_used || 0) / (stylist?.voice_limit || 3)) * 100)}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>💬 短信自动回复</span>
-                  <span>{stylist?.sms_used || 0} / {stylist?.sms_limit || 10} 条</span>
+                  <span>{stylist?.sms_used || 0} / {stylist?.sms_limit || 3} 条</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-600 transition-all" style={{ width: `${Math.min(100, ((stylist?.sms_used || 0) / (stylist?.sms_limit || 10)) * 100)}%` }} />
+                  <div className="h-full bg-blue-600 transition-all" style={{ width: `${Math.min(100, ((stylist?.sms_used || 0) / (stylist?.sms_limit || 3)) * 100)}%` }} />
                 </div>
               </div>
             </div>
@@ -153,14 +152,14 @@ function HomeContent() {
                   <div className="font-medium text-sm">升级 Pro 个人版</div>
                   <div className="text-[11px] text-gray-400">300次语音 + 200条短信/月</div>
                 </div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$19.90/月</span>
+                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$30/月</span>
               </a>
               <a href={teamUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100">
                 <div>
                   <div className="font-medium text-sm">升级 Team 沙龙版</div>
                   <div className="text-[11px] text-gray-500">1000次语音 + 600条短信/月</div>
                 </div>
-                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$29.90/月</span>
+                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$60/月</span>
               </a>
             </div>
           </div>
@@ -228,8 +227,8 @@ function HomeContent() {
               <h3 className="text-xl font-medium mb-2">Free Trial</h3>
               <div className="text-4xl font-bold mb-6">$0<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-500 space-y-3 mb-8 flex-1 text-sm">
-                <li>• 10 Voice Formulas</li>
-                <li>• 10 AI SMS Replies</li>
+                <li>• 3 Voice Formulas</li>
+                <li>• 3 AI SMS Replies</li>
                 <li>• Client Database</li>
               </ul>
               <Link href="/login" className="block text-center w-full py-3 rounded-xl bg-zinc-100 text-zinc-900 font-medium hover:bg-zinc-200 transition">
@@ -242,7 +241,7 @@ function HomeContent() {
                 Most Popular
               </div>
               <h3 className="text-xl font-medium mb-2">Solo Pro</h3>
-              <div className="text-4xl font-bold mb-6">$19.90<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
+              <div className="text-4xl font-bold mb-6">$30<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-400 space-y-3 mb-8 flex-1 text-sm">
                 <li>• 300 Voice Formulas/mo</li>
                 <li>• 200 AI SMS Replies/mo</li>
@@ -255,7 +254,7 @@ function HomeContent() {
 
             <div className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm flex flex-col">
               <h3 className="text-xl font-medium mb-2">Team Salon</h3>
-              <div className="text-4xl font-bold mb-6">$29.90<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
+              <div className="text-4xl font-bold mb-6">$60<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-500 space-y-3 mb-8 flex-1 text-sm">
                 <li>• 1000 Voice Formulas/mo</li>
                 <li>• 600 AI SMS Replies/mo</li>
