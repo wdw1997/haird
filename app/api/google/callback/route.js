@@ -10,25 +10,51 @@ export async function GET(req) {
   const redirectBase = process.env.NEXT_PUBLIC_APP_URL || 'https://www.veloceia.com'
 
   if (errorParam) {
-    return Response.redirect(`${redirectBase}/?calendar=cancelled`)
+    return Response.redirect(redirectBase + '/?calendar=cancelled')
   }
   if (!stylistId || !code) {
     return new Response('授权参数缺失，请重新从设置页发起授权', { status: 400 })
   }
 
-  const { data: stylist } = await supabaseAdmin.from('stylists').select('id').eq('id', stylistId).maybeSingle()
+  const stylistResult = await supabaseAdmin
+    .from('stylists')
+    .select('id')
+    .eq('id', stylistId)
+    .maybeSingle()
+  const stylist = stylistResult.data
+
   if (!stylist) {
     return new Response('未找到对应账号', { status: 404 })
   }
 
   try {
-    const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI)
-    const { tokens } = await oauth2Client.getToken(code)
-    const refreshToken = tokens.refresh_token
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    )
+    const tokenResult = await oauth2Client.getToken(code)
+    const refreshToken = tokenResult.tokens.refresh_token
 
     if (!refreshToken) {
       console.error('Google未返回refresh_token，stylist:', stylistId)
-      return Response.redirect(`${redirectBase}/?calendar=no_refresh_token`)
+      return Response.redirect(redirectBase + '/?calendar=no_refresh_token')
     }
 
-    const { error:
+    const rpcResult = await supabaseAdmin.rpc('encrypt_and_store_token', {
+      p_stylist_id: stylist.id,
+      p_token: refreshToken,
+      p_key: process.env.TOKEN_ENCRYPTION_KEY,
+    })
+
+    if (rpcResult.error) {
+      console.error('存储token失败:', rpcResult.error)
+      return Response.redirect(redirectBase + '/?calendar=save_failed')
+    }
+
+    return Response.redirect(redirectBase + '/?calendar=connected')
+  } catch (err) {
+    console.error('Google OAuth callback失败:', err)
+    return Response.redirect(redirectBase + '/?calendar=error')
+  }
+}
