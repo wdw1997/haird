@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import Link from 'next/link'
 
 export default function SettingsPage() {
   const [form, setForm] = useState({
@@ -11,6 +12,11 @@ export default function SettingsPage() {
     tone: 'friendly', use_emoji: false,
   })
   const [status, setStatus] = useState('')
+
+  // 🔥 日历同步测试相关状态
+  const [calendarEvents, setCalendarEvents] = useState([])
+  const [loadingCalendar, setLoadingCalendar] = useState(false)
+  const [calendarError, setCalendarError] = useState('')
 
   useEffect(() => {
     (async () => {
@@ -66,12 +72,115 @@ export default function SettingsPage() {
     setStatus(error ? 'Save failed: ' + error.message : 'Saved successfully!')
   }
 
+  // 🔥 拉取 Google 日历事件（测试用）
+  const fetchCalendar = async () => {
+    setLoadingCalendar(true)
+    setCalendarError('')
+    setCalendarEvents([])
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setCalendarError('请先登录')
+        return
+      }
+
+      const res = await fetch('/api/calendar', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        setCalendarError(data.error || '读取日历失败，请稍后重试')
+        return
+      }
+
+      setCalendarEvents(data.events || [])
+    } catch (err) {
+      console.error('fetchCalendar 出错:', err)
+      setCalendarError('网络异常，请检查网络后重试')
+    } finally {
+      setLoadingCalendar(false)
+    }
+  }
+
+  const formatEventTime = (value) => {
+    if (!value) return ''
+    const d = new Date(value)
+    if (isNaN(d.getTime())) return value // 全天事件是纯日期字符串，直接显示
+    return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
   const input = { padding: 10, borderRadius: 6, border: '1px solid #ccc', width: '100%' }
   const label = { fontWeight: 600, marginTop: 16, display: 'block' }
 
   return (
     <div style={{ padding: 40, maxWidth: 600, margin: '0 auto' }}>
+      <Link href="/" style={{ fontSize: 14, color: '#666', textDecoration: 'none', marginBottom: 20, display: 'inline-block' }}>
+        &larr; 返回首页
+      </Link>
+
       <h1>Business Settings</h1>
+
+      {/* 🔥 日历同步测试区块 */}
+      <div style={{ padding: 20, background: '#f8f9fa', borderRadius: 12, marginTop: 20, marginBottom: 10, border: '1px solid #e9ecef' }}>
+        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📅 Google 日历同步测试</h2>
+        <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 12 }}>
+          点击下方按钮，测试是否能正确读取你已连接的 Google 日历未来 7 天的事件。
+        </p>
+
+        <button
+          onClick={fetchCalendar}
+          disabled={loadingCalendar}
+          style={{
+            padding: '10px 16px',
+            background: loadingCalendar ? '#999' : '#4285F4',
+            color: 'white',
+            border: 'none',
+            borderRadius: 6,
+            cursor: loadingCalendar ? 'not-allowed' : 'pointer',
+            fontSize: 14,
+          }}
+        >
+          {loadingCalendar ? '读取中...' : '读取未来 7 天日历'}
+        </button>
+
+        {calendarError && (
+          <p style={{ marginTop: 12, color: '#d93025', fontSize: 13 }}>
+            ⚠️ {calendarError}
+          </p>
+        )}
+
+        {!calendarError && !loadingCalendar && calendarEvents.length === 0 && (
+          <p style={{ marginTop: 12, color: '#999', fontSize: 13 }}>
+            暂无数据，点击上方按钮开始读取。
+          </p>
+        )}
+
+        {calendarEvents.length > 0 && (
+          <ul style={{ marginTop: 12, paddingLeft: 0, listStyle: 'none' }}>
+            {calendarEvents.map((event) => (
+              <li
+                key={event.id}
+                style={{
+                  padding: '8px 12px',
+                  background: 'white',
+                  borderRadius: 8,
+                  marginBottom: 6,
+                  border: '1px solid #eee',
+                  fontSize: 13,
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{event.title}</div>
+                <div style={{ color: '#666', marginTop: 2 }}>
+                  {formatEventTime(event.start)} — {formatEventTime(event.end)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <label style={label}>Business Name</label>
       <input style={input} value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
