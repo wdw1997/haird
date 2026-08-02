@@ -10,8 +10,8 @@ export async function GET(req) {
   }
 
   const productId = plan === 'team'
-    ? process.env.CREEM_TEAM_PRODUCT_ID
-    : process.env.CREEM_PRO_PRODUCT_ID
+    ? process.env.NEXT_PUBLIC_CREEM_CHECKOUT_TEAM
+    : process.env.NEXT_PUBLIC_CREEM_CHECKOUT_PRO
 
   if (!productId) {
     console.error('未配置对应的 Creem Product ID, plan:', plan)
