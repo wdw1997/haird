@@ -6,7 +6,7 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const stylistId = searchParams.get('state')
-  const errorParam = searchParams.get('error') // 用户在Google那边点了取消也会带这个参数
+  const errorParam = searchParams.get('error')
   const redirectBase = process.env.NEXT_PUBLIC_APP_URL || 'https://www.veloceia.com'
 
   if (errorParam) {
@@ -31,15 +31,4 @@ export async function GET(req) {
       return Response.redirect(`${redirectBase}/?calendar=no_refresh_token`)
     }
 
-    const { error: rpcError } = await supabaseAdmin.rpc('encrypt_and_store_token', {
-      p_stylist_id: stylist.id,
-      p_token: refreshToken,
-      p_key: process.env.TOKEN_ENCRYPTION_KEY,
-    })
-
-    if (rpcError) {
-      console.error('存储token失败:', rpcError)
-      return Response.redirect(`${redirectBase}/?calendar=save_failed`)
-    }
-
-    return Response.redirect(
+    const { error:
