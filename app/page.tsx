@@ -166,6 +166,9 @@ function HomeContent() {
             <Link href="/clients" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
               <span className="text-xl">👥</span> 顾客列表
             </Link>
+            <Link href="/inbox" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
+              <span className="text-xl">📨</span> 对话记录
+            </Link>
 
             <button
               onClick={handleCalendarButtonClick}
