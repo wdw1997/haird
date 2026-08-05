@@ -2,6 +2,7 @@ import { whisperClient, STT_MODEL } from '@/lib/whisper-client'
 import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { createClient } from '@supabase/supabase-js'
+import { isQuotaExceeded, checkAndNotifyQuota } from '@/lib/quota'
 
 export async function POST(req) {
   const supabaseAdmin = getSupabaseAdmin()
@@ -24,8 +25,8 @@ export async function POST(req) {
     return Response.json({ error: '未找到账号信息' }, { status: 404 })
   }
 
-  if (stylist.voice_used >= stylist.voice_limit) {
-    return Response.json({ error: '本月语音额度已用完，请升级套餐' }, { status: 403 })
+  if (isQuotaExceeded(stylist, 'voice')) {
+    return Response.json({ error: '本月语音额度已用完，请购买加油包或升级套餐' }, { status: 403 })
   }
 
   const formData = await req.formData()
@@ -61,7 +62,6 @@ export async function POST(req) {
     extracted = { customer_name: '', service_type: '', formula: '', notes: text }
   }
 
-  // 确定这条配方挂在哪个客户名下：优先用前端传的 clientId，否则按提取到的姓名匹配
   let resolvedClientId = null
   if (clientId) {
     const { data: client } = await supabaseAdmin
@@ -85,7 +85,9 @@ export async function POST(req) {
     saved = !error
   }
 
-  await supabaseAdmin.from('stylists').update({ voice_used: stylist.voice_used + 1 }).eq('id', stylist.id)
+  const newUsed = stylist.voice_used + 1
+  await supabaseAdmin.from('stylists').update({ voice_used: newUsed }).eq('id', stylist.id)
+  await checkAndNotifyQuota(supabaseAdmin, stylist, 'voice', newUsed)
 
   return Response.json({ transcript: text, extracted, saved, needsClientLink: !resolvedClientId })
 }
