@@ -21,11 +21,6 @@ export async function POST(req) {
   const body = (params.Body || '').trim()
   const bodyUpper = body.toUpperCase()
 
-  const xmlReply = (text) =>
-    new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${text}</Message></Response>`, {
-      headers: { 'Content-Type': 'text/xml' },
-    })
-
   // 1. 按接收号码反查这条短信属于哪个理发师(多商家路由)
   const { data: stylist } = await supabaseAdmin
     .from('stylists')
@@ -35,7 +30,39 @@ export async function POST(req) {
 
   if (!stylist) {
     console.error('No stylist found for number:', to)
-    return xmlReply('Sorry, this number is not currently active.')
+    return new Response(
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Sorry, this number is not currently active.</Message></Response>`,
+      { headers: { 'Content-Type': 'text/xml' } }
+    )
+  }
+
+  // 顾客号码对应的client_id(如果已存在),用于把消息挂到正确的客户档案下
+  let matchedClientId = null
+  const { data: existingClientForLog } = await supabaseAdmin
+    .from('clients').select('id').eq('phone_number', from).eq('stylist_id', stylist.id).maybeSingle()
+  if (existingClientForLog) matchedClientId = existingClientForLog.id
+
+  // 🔥 不管后面走哪条分支(限流/退订/AI回复/额度用完),都先把顾客这条消息存进对话记录
+  await supabaseAdmin.from('messages').insert({
+    stylist_id: stylist.id,
+    client_id: matchedClientId,
+    phone_number: from,
+    direction: 'inbound',
+    body,
+  })
+
+  // 🔥 封装回复函数,每次回复都会自动记录到对话历史里
+  const xmlReply = async (text) => {
+    await supabaseAdmin.from('messages').insert({
+      stylist_id: stylist.id,
+      client_id: matchedClientId,
+      phone_number: from,
+      direction: 'outbound',
+      body: text,
+    })
+    return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${text}</Message></Response>`, {
+      headers: { 'Content-Type': 'text/xml' },
+    })
   }
 
   // 2. STOP / START 合规(TCPA要求)
@@ -94,7 +121,7 @@ export async function POST(req) {
     const { data: newClient, error } = await supabaseAdmin
       .from('clients').insert({ stylist_id: stylist.id, phone_number: from, name: null })
       .select('id, name').single()
-    if (!error) { client = { ...newClient, formulas: [] }; isNewClient = true }
+    if (!error) { client = { ...newClient, formulas: [] }; isNewClient = true; matchedClientId = newClient.id }
   }
 
   let contextInfo = 'This is a new customer with no history on file.'
