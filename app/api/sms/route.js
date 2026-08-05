@@ -1,6 +1,7 @@
 import twilio from 'twilio'
 import { qwen, QWEN_MODEL } from '@/lib/qwen-client'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { isQuotaExceeded, checkAndNotifyQuota } from '@/lib/quota'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,7 @@ export async function POST(req) {
       headers: { 'Content-Type': 'text/xml' },
     })
 
-  // 1. 按接收号码反查这条短信属于哪个理发师(多商家路由,不再固定取第一条)
+  // 1. 按接收号码反查这条短信属于哪个理发师(多商家路由)
   const { data: stylist } = await supabaseAdmin
     .from('stylists')
     .select('*')
@@ -74,8 +75,8 @@ export async function POST(req) {
     last_message_at: now,
   })
 
-  // 4. 月度额度检查(直接读 stylists 表自身的字段,不再查不存在的 plans/usage_records)
-  if (stylist.sms_used >= stylist.sms_limit) {
+  // 4. 月度额度检查(套餐额度 + 加油包额度)
+  if (isQuotaExceeded(stylist, 'sms')) {
     return xmlReply("Thanks for reaching out! We'll get back to you as soon as possible.")
   }
 
@@ -138,8 +139,10 @@ Rules:
     reply = "Thanks for your message! We'll get back to you shortly."
   }
 
-  // 8. 用量+1,直接更新stylists表本身
-  await supabaseAdmin.from('stylists').update({ sms_used: stylist.sms_used + 1 }).eq('id', stylist.id)
+  // 8. 用量+1,并检查是否需要发80%/100%预警邮件
+  const newUsed = stylist.sms_used + 1
+  await supabaseAdmin.from('stylists').update({ sms_used: newUsed }).eq('id', stylist.id)
+  await checkAndNotifyQuota(supabaseAdmin, stylist, 'sms', newUsed)
 
   return xmlReply(reply)
 }
