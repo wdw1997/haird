@@ -2,16 +2,25 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url)
-  const plan = searchParams.get('plan')       // 'pro' 或 'team'
+  const plan = searchParams.get('plan')       // 'pro' | 'team' | 'addon'
   const stylistId = searchParams.get('stylist')
 
   if (!stylistId) {
     return new Response('缺少 stylist 参数', { status: 400 })
   }
 
-  const productId = plan === 'team'
-    ? process.env.NEXT_PUBLIC_CREEM_CHECKOUT_TEAM
-    : process.env.NEXT_PUBLIC_CREEM_CHECKOUT_PRO
+  let productId
+  let metadata
+
+  if (plan === 'addon') {
+    productId = process.env.NEXT_PUBLIC_CREEM_CHECKOUT_ADDON
+    metadata = { stylist_id: stylistId, type: 'addon' }
+  } else {
+    productId = plan === 'team'
+      ? process.env.NEXT_PUBLIC_CREEM_CHECKOUT_TEAM
+      : process.env.NEXT_PUBLIC_CREEM_CHECKOUT_PRO
+    metadata = { stylist_id: stylistId, plan: plan === 'team' ? 'team' : 'pro' }
+  }
 
   if (!productId) {
     console.error('未配置对应的 Creem Product ID, plan:', plan)
@@ -29,7 +38,7 @@ export async function GET(req) {
         product_id: productId,
         request_id: `${stylistId}_${plan}_${Date.now()}`,
         success_url: `${process.env.NEXT_PUBLIC_APP_URL}/`,
-        metadata: { stylist_id: stylistId, plan },
+        metadata,
       }),
     })
 
