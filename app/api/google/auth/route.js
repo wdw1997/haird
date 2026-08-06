@@ -32,9 +32,13 @@ export async function GET(req) {
 
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/calendar.readonly'],
+    // 🔥 从只读改为可读写事件 + 查询忙闲状态,用于AI自动排预约
+    scope: [
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/calendar.freebusy',
+    ],
     prompt: 'consent',
-    state: stylist.id, // 关键：回调时靠这个认出是哪个账号
+    state: stylist.id,
   })
 
   return Response.json({ url })
