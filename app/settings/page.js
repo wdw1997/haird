@@ -3,20 +3,34 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import Link from 'next/link'
 
+const TIMEZONES = [
+  { value: 'America/New_York', label: '美东 (New York)' },
+  { value: 'America/Chicago', label: '美中 (Chicago)' },
+  { value: 'America/Denver', label: '美山区 (Denver)' },
+  { value: 'America/Los_Angeles', label: '美西 (Los Angeles)' },
+  { value: 'Asia/Shanghai', label: '中国 (Shanghai)' },
+]
+
 export default function SettingsPage() {
+  const [stylistId, setStylistId] = useState(null)
   const [form, setForm] = useState({
     business_name: '', address: '', contact_phone: '',
     business_hours_text: '', services_text: '',
     booking_mode: 'ai_collect_manual_confirm', min_advance_hours: 24,
     cancellation_policy: '', available_slots_text: '',
     tone: 'friendly', use_emoji: false,
+    timezone: 'America/New_York',
   })
   const [status, setStatus] = useState('')
 
-  // 🔥 日历同步测试相关状态
   const [calendarEvents, setCalendarEvents] = useState([])
   const [loadingCalendar, setLoadingCalendar] = useState(false)
   const [calendarError, setCalendarError] = useState('')
+
+  const [apptForm, setApptForm] = useState({ clientName: '', date: '', time: '', duration: 60, service: '', notes: '' })
+  const [apptStatus, setApptStatus] = useState('')
+
+  const [pendingRequests, setPendingRequests] = useState([])
 
   useEffect(() => {
     (async () => {
@@ -24,6 +38,8 @@ export default function SettingsPage() {
       if (!user) return
       const { data: stylist } = await supabase.from('stylists').select('id').eq('auth_user_id', user.id).maybeSingle()
       if (!stylist) return
+      setStylistId(stylist.id)
+
       const { data: biz } = await supabase.from('business_settings').select('*').eq('stylist_id', stylist.id).maybeSingle()
       if (biz) {
         setForm({
@@ -38,8 +54,14 @@ export default function SettingsPage() {
           available_slots_text: biz.available_slots_text || '',
           tone: biz.tone || 'friendly',
           use_emoji: biz.use_emoji || false,
+          timezone: biz.timezone || 'America/New_York',
         })
       }
+
+      const { data: requests } = await supabase
+        .from('appointment_requests').select('*').eq('stylist_id', stylist.id).eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      setPendingRequests(requests || [])
     })()
   }, [])
 
@@ -67,48 +89,78 @@ export default function SettingsPage() {
       available_slots_text: form.available_slots_text,
       tone: form.tone,
       use_emoji: form.use_emoji,
+      timezone: form.timezone,
       updated_at: new Date().toISOString(),
     })
     setStatus(error ? 'Save failed: ' + error.message : 'Saved successfully!')
   }
 
-  // 🔥 拉取 Google 日历事件（测试用）
   const fetchCalendar = async () => {
     setLoadingCalendar(true)
     setCalendarError('')
     setCalendarEvents([])
-
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        setCalendarError('请先登录')
-        return
-      }
-
-      const res = await fetch('/api/calendar', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-
+      if (!session) { setCalendarError('请先登录'); return }
+      const res = await fetch('/api/calendar', { headers: { Authorization: `Bearer ${session.access_token}` } })
       const data = await res.json()
-
-      if (!res.ok || data.error) {
-        setCalendarError(data.error || '读取日历失败，请稍后重试')
-        return
-      }
-
+      if (!res.ok || data.error) { setCalendarError(data.error || '读取日历失败，请稍后重试'); return }
       setCalendarEvents(data.events || [])
     } catch (err) {
-      console.error('fetchCalendar 出错:', err)
       setCalendarError('网络异常，请检查网络后重试')
     } finally {
       setLoadingCalendar(false)
     }
   }
 
+  const handleAddAppointment = async () => {
+    setApptStatus('提交中...')
+    if (!apptForm.date || !apptForm.time) { setApptStatus('请填写日期和时间'); return }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setApptStatus('请先登录'); return }
+
+      const startLocal = new Date(`${apptForm.date}T${apptForm.time}:00`)
+      const endLocal = new Date(startLocal.getTime() + Number(apptForm.duration) * 60000)
+
+      const res = await fetch('/api/calendar/create', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: `预约: ${apptForm.service || '服务'} - ${apptForm.clientName || '客户'}`,
+          description: apptForm.notes,
+          startISO: startLocal.toISOString(),
+          endISO: endLocal.toISOString(),
+          timeZone: form.timezone,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setApptStatus('❌ ' + (data.error || '添加失败')); return }
+      setApptStatus('✅ 已添加到日历')
+      setApptForm({ clientName: '', date: '', time: '', duration: 60, service: '', notes: '' })
+    } catch (err) {
+      setApptStatus('❌ 网络异常')
+    }
+  }
+
+  const handleConfirmRequest = async (requestId, action) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/appointments/confirm', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, action }),
+    })
+    const data = await res.json()
+    if (data.error) { alert(data.error); return }
+    setPendingRequests(prev => prev.filter(r => r.id !== requestId))
+  }
+
   const formatEventTime = (value) => {
     if (!value) return ''
     const d = new Date(value)
-    if (isNaN(d.getTime())) return value // 全天事件是纯日期字符串，直接显示
+    if (isNaN(d.getTime())) return value
     return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
@@ -123,64 +175,67 @@ export default function SettingsPage() {
 
       <h1>Business Settings</h1>
 
-      {/* 🔥 日历同步测试区块 */}
+      {pendingRequests.length > 0 && (
+        <div style={{ padding: 20, background: '#fff8e6', borderRadius: 12, marginTop: 20, border: '1px solid #ffe4a3' }}>
+          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>⏳ 待确认预约请求 ({pendingRequests.length})</h2>
+          {pendingRequests.map(r => (
+            <div key={r.id} style={{ background: 'white', borderRadius: 8, padding: 12, marginBottom: 8, fontSize: 13 }}>
+              <div><strong>电话:</strong> {r.phone_number}</div>
+              <div><strong>服务:</strong> {r.service_type || '未指定'}</div>
+              <div><strong>时间:</strong> {r.requested_start ? formatEventTime(r.requested_start) : '未确定(未连接日历)'}</div>
+              {r.notes && <div style={{ color: '#666', marginTop: 4 }}>{r.notes}</div>}
+              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                <button onClick={() => handleConfirmRequest(r.id, 'confirm')} style={{ flex: 1, padding: 8, background: '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>确认</button>
+                <button onClick={() => handleConfirmRequest(r.id, 'decline')} style={{ flex: 1, padding: 8, background: '#f1f1f1', color: '#333', border: 'none', borderRadius: 6, cursor: 'pointer' }}>拒绝</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ padding: 20, background: '#f0f7ff', borderRadius: 12, marginTop: 20, border: '1px solid #cfe4ff' }}>
+        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📞 手动添加预约</h2>
+        <p style={{ fontSize: 13, color: '#666', marginTop: 0 }}>适用于老客户打电话/到店直接约的情况</p>
+        <input style={{ ...input, marginBottom: 8 }} placeholder="客户姓名" value={apptForm.clientName} onChange={e => setApptForm({ ...apptForm, clientName: e.target.value })} />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input style={input} type="date" value={apptForm.date} onChange={e => setApptForm({ ...apptForm, date: e.target.value })} />
+          <input style={input} type="time" value={apptForm.time} onChange={e => setApptForm({ ...apptForm, time: e.target.value })} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input style={input} placeholder="服务项目" value={apptForm.service} onChange={e => setApptForm({ ...apptForm, service: e.target.value })} />
+          <input style={{ ...input, width: 120 }} type="number" placeholder="时长(分钟)" value={apptForm.duration} onChange={e => setApptForm({ ...apptForm, duration: e.target.value })} />
+        </div>
+        <textarea style={{ ...input, height: 50, marginBottom: 8 }} placeholder="备注(可选)" value={apptForm.notes} onChange={e => setApptForm({ ...apptForm, notes: e.target.value })} />
+        <button onClick={handleAddAppointment} style={{ width: '100%', padding: 10, background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>添加到日历</button>
+        {apptStatus && <p style={{ marginTop: 8, fontSize: 13, color: '#666' }}>{apptStatus}</p>}
+      </div>
+
       <div style={{ padding: 20, background: '#f8f9fa', borderRadius: 12, marginTop: 20, marginBottom: 10, border: '1px solid #e9ecef' }}>
         <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📅 Google 日历同步测试</h2>
-        <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 12 }}>
-          点击下方按钮，测试是否能正确读取你已连接的 Google 日历未来 7 天的事件。
-        </p>
-
         <button
           onClick={fetchCalendar}
           disabled={loadingCalendar}
-          style={{
-            padding: '10px 16px',
-            background: loadingCalendar ? '#999' : '#4285F4',
-            color: 'white',
-            border: 'none',
-            borderRadius: 6,
-            cursor: loadingCalendar ? 'not-allowed' : 'pointer',
-            fontSize: 14,
-          }}
+          style={{ padding: '10px 16px', background: loadingCalendar ? '#999' : '#4285F4', color: 'white', border: 'none', borderRadius: 6, cursor: loadingCalendar ? 'not-allowed' : 'pointer', fontSize: 14 }}
         >
           {loadingCalendar ? '读取中...' : '读取未来 7 天日历'}
         </button>
-
-        {calendarError && (
-          <p style={{ marginTop: 12, color: '#d93025', fontSize: 13 }}>
-            ⚠️ {calendarError}
-          </p>
-        )}
-
-        {!calendarError && !loadingCalendar && calendarEvents.length === 0 && (
-          <p style={{ marginTop: 12, color: '#999', fontSize: 13 }}>
-            暂无数据，点击上方按钮开始读取。
-          </p>
-        )}
-
+        {calendarError && <p style={{ marginTop: 12, color: '#d93025', fontSize: 13 }}>⚠️ {calendarError}</p>}
         {calendarEvents.length > 0 && (
           <ul style={{ marginTop: 12, paddingLeft: 0, listStyle: 'none' }}>
             {calendarEvents.map((event) => (
-              <li
-                key={event.id}
-                style={{
-                  padding: '8px 12px',
-                  background: 'white',
-                  borderRadius: 8,
-                  marginBottom: 6,
-                  border: '1px solid #eee',
-                  fontSize: 13,
-                }}
-              >
+              <li key={event.id} style={{ padding: '8px 12px', background: 'white', borderRadius: 8, marginBottom: 6, border: '1px solid #eee', fontSize: 13 }}>
                 <div style={{ fontWeight: 600 }}>{event.title}</div>
-                <div style={{ color: '#666', marginTop: 2 }}>
-                  {formatEventTime(event.start)} — {formatEventTime(event.end)}
-                </div>
+                <div style={{ color: '#666', marginTop: 2 }}>{formatEventTime(event.start)} — {formatEventTime(event.end)}</div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <label style={label}>🌍 店铺所在时区(影响AI排预约的时间准确性)</label>
+      <select style={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
+        {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+      </select>
 
       <label style={label}>Business Name</label>
       <input style={input} value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
@@ -208,9 +263,6 @@ export default function SettingsPage() {
 
       <label style={label}>Cancellation Policy</label>
       <textarea style={{ ...input, height: 60 }} placeholder="e.g. 50% fee for cancellations within 24 hours" value={form.cancellation_policy} onChange={e => setForm({ ...form, cancellation_policy: e.target.value })} />
-
-      <label style={label}>Available Slots This Week (free text, manual for now)</label>
-      <textarea style={{ ...input, height: 60 }} value={form.available_slots_text} onChange={e => setForm({ ...form, available_slots_text: e.target.value })} />
 
       <label style={label}>Reply Tone</label>
       <select style={input} value={form.tone} onChange={e => setForm({ ...form, tone: e.target.value })}>
