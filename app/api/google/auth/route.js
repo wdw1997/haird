@@ -8,20 +8,20 @@ export async function GET(req) {
   const authHeader = req.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
   if (!token) {
-    return Response.json({ error: '请先登录' }, { status: 401 })
+    return Response.json({ error: 'Please log in first' }, { status: 401 })
   }
 
   const supabaseAuth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token)
   if (authError || !userData?.user) {
-    return Response.json({ error: '登录已过期' }, { status: 401 })
+    return Response.json({ error: 'Session expired' }, { status: 401 })
   }
 
   const supabaseAdmin = getSupabaseAdmin()
   const { data: stylist } = await supabaseAdmin
     .from('stylists').select('id').eq('auth_user_id', userData.user.id).maybeSingle()
   if (!stylist) {
-    return Response.json({ error: '未找到账号信息' }, { status: 404 })
+    return Response.json({ error: 'Account not found' }, { status: 404 })
   }
 
   const oauth2Client = new google.auth.OAuth2(
@@ -32,7 +32,7 @@ export async function GET(req) {
 
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    // 🔥 从只读改为可读写事件 + 查询忙闲状态,用于AI自动排预约
+    // Changed from read-only to read/write events + freebusy lookup, so the AI can auto-schedule appointments
     scope: [
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/calendar.freebusy',
