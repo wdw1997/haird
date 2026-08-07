@@ -56,4 +56,62 @@ export default function RecordPage() {
       headers: { Authorization: `Bearer ${session.access_token}` },
       body: formData,
     })
-    const data
+    const data = await res.json()
+    if (data.error) {
+      setStatus('Error: ' + data.error)
+      return
+    }
+    setStatus(
+      JSON.stringify(data.extracted, null, 2) +
+      (data.needsClientLink ? '\n\n⚠️ Could not automatically match a client. Please link it manually from the Client List.' : '')
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 px-6 py-12 flex flex-col items-center">
+      <div className="w-full max-w-md">
+        <Link href="/" className="text-sm text-gray-500 hover:text-black mb-8 inline-block">
+          &larr; Back to Home
+        </Link>
+
+        <div className="mt-6">
+          <label className="text-sm font-medium text-gray-500 mb-2 block">Which client is this for? (optional — AI will try to detect automatically)</label>
+          <select
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
+          >
+            <option value="">Not specified / let AI detect</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name || c.phone_number}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col items-center justify-center mt-12">
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            className={`flex h-40 w-40 items-center justify-center rounded-full text-xl font-bold text-white shadow-2xl transition-all duration-300 ${
+              recording
+                ? 'bg-red-500 animate-pulse scale-110 shadow-red-500/50'
+                : 'bg-black hover:scale-105 hover:bg-gray-800'
+            }`}
+          >
+            {recording ? 'Stop' : 'Start Recording'}
+          </button>
+
+          <div className="mt-12 w-full">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Result</h3>
+            <div className="min-h-[150px] w-full rounded-2xl bg-white p-5 shadow-sm border border-gray-100 overflow-auto">
+              {status ? (
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{status}</pre>
+              ) : (
+                <p className="text-sm text-gray-400 text-center mt-10">Tap the button to start recording</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
