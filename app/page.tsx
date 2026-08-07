@@ -1,17 +1,15 @@
 'use client'
 import Link from 'next/link'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
-function HomeContent() {
+export default function Home() {
   const [session, setSession] = useState<any>(undefined)
   const [stylist, setStylist] = useState<any>(null)
-  const [calendarMsg, setCalendarMsg] = useState('')
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  const refreshStylist = () => {
+  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) {
@@ -23,51 +21,11 @@ function HomeContent() {
           .then(({ data }) => setStylist(data))
       }
     })
-  }
-
-  useEffect(() => {
-    refreshStylist()
   }, [])
-
-  useEffect(() => {
-    const calendarStatus = searchParams.get('calendar')
-    const messages: Record<string, string> = {
-      connected: '✅ Google 日历已成功连接',
-      cancelled: '已取消授权',
-      no_refresh_token: '⚠️ 未获取到有效授权，请重新连接（如果之前已授权过，去 Google 账号权限里撤销后重试）',
-      save_failed: '❌ 保存授权信息失败，请重试或联系客服',
-      error: '❌ 连接失败，请重试',
-    }
-    if (calendarStatus && messages[calendarStatus]) {
-      setCalendarMsg(messages[calendarStatus])
-      refreshStylist()
-    }
-  }, [searchParams])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     window.location.reload()
-  }
-
-  const handleConnectGoogle = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    const res = await fetch('/api/google/auth', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-    const data = await res.json()
-    if (data.url) window.location.href = data.url
-    else alert(data.error || '连接失败')
-  }
-
-  const isCalendarConnected = !!stylist?.google_cal_refresh_token_encrypted
-
-  const handleCalendarButtonClick = () => {
-    if (isCalendarConnected) {
-      router.push('/settings')
-    } else {
-      handleConnectGoogle()
-    }
   }
 
   if (session === undefined) {
@@ -78,58 +36,25 @@ function HomeContent() {
     const proUrl = stylist ? `/api/checkout?plan=pro&stylist=${stylist.id}` : '#'
     const teamUrl = stylist ? `/api/checkout?plan=team&stylist=${stylist.id}` : '#'
     const addonUrl = stylist ? `/api/checkout?plan=addon&stylist=${stylist.id}` : '#'
-
-    // 🔥 有效额度 = 套餐额度 + 加油包额度
-    const effectiveSmsLimit = (stylist?.sms_limit || 3) + (stylist?.bonus_sms || 0)
-    const effectiveVoiceLimit = (stylist?.voice_limit || 3) + (stylist?.bonus_voice || 0)
-    const smsUsed = stylist?.sms_used || 0
-    const voiceUsed = stylist?.voice_used || 0
-    const smsPercent = effectiveSmsLimit > 0 ? (smsUsed / effectiveSmsLimit) * 100 : 0
-    const voicePercent = effectiveVoiceLimit > 0 ? (voiceUsed / effectiveVoiceLimit) * 100 : 0
-    const maxPercent = Math.max(smsPercent, voicePercent)
-    const isExhausted = maxPercent >= 100
-    const isNearLimit = maxPercent >= 80 && maxPercent < 100
+    const nearLimit = stylist && (stylist.sms_used >= stylist.sms_limit * 0.8 || stylist.voice_used >= stylist.voice_limit * 0.8)
 
     return (
       <div className="min-h-screen bg-gray-50 px-6 py-10">
         <div className="mx-auto max-w-md">
           <header className="mb-8 text-center">
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">Salon AI</h1>
-            <p className="text-sm text-gray-500 mt-2">智能发型师配方与短信助手</p>
+            <p className="text-sm text-gray-500 mt-2">Smart voice formulas & SMS assistant for hairdressers</p>
           </header>
 
-          {calendarMsg && (
-            <div className="mb-6 rounded-xl bg-blue-50 text-blue-700 text-sm p-3 text-center">
-              {calendarMsg}
-            </div>
-          )}
-
-          {/* 🔥 100%额度耗尽:强制拦截提示 */}
-          {isExhausted && (
-            <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-              <div className="font-bold mb-1">⛔ 额度已耗尽</div>
-              <p className="mb-3">AI 助理已暂停自动回复，请购买加油包或升级套餐以恢复服务。</p>
-              <div className="flex gap-2">
-                <a href={addonUrl} className="flex-1 text-center bg-red-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-red-700 transition">
-                  $9.90 购买加油包
-                </a>
-                <Link href="#upgrade" className="flex-1 text-center bg-white border border-red-300 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-50 transition">
-                  升级套餐
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* 🔥 80%额度预警:黄色横幅 */}
-          {isNearLimit && !isExhausted && (
-            <div className="mb-6 rounded-xl bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800 text-center">
-              您的本月额度已使用 {Math.round(maxPercent)}%，请留意。
+          {nearLimit && (
+            <div className="mb-6 rounded-xl bg-yellow-50 border border-yellow-200 p-4 text-sm text-yellow-800">
+              ⚠️ You've used over 80% of your monthly quota. Consider upgrading or buying a top-up pack to avoid interruption.
             </div>
           )}
 
           <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-sm font-medium text-gray-500">当前版本</span>
+              <span className="text-sm font-medium text-gray-500">Current Plan</span>
               <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase ${stylist?.plan_type === 'free' ? 'bg-gray-100 text-gray-600' : 'bg-black text-white'}`}>
                 {stylist?.plan_type || 'FREE'}
               </span>
@@ -137,82 +62,79 @@ function HomeContent() {
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>🎙️ 语音配方识别</span>
-                  <span>{voiceUsed} / {effectiveVoiceLimit} 次{stylist?.bonus_voice ? ` (含加油包+${stylist.bonus_voice})` : ''}</span>
+                  <span>🎙️ Voice Formulas</span>
+                  <span>{stylist?.voice_used || 0} / {stylist?.voice_limit || 10}</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full transition-all ${voicePercent >= 100 ? 'bg-red-500' : voicePercent >= 80 ? 'bg-yellow-500' : 'bg-black'}`} style={{ width: `${Math.min(100, voicePercent)}%` }} />
+                  <div className="h-full bg-black transition-all" style={{ width: `${Math.min(100, ((stylist?.voice_used || 0) / (stylist?.voice_limit || 10)) * 100)}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>💬 短信自动回复</span>
-                  <span>{smsUsed} / {effectiveSmsLimit} 条{stylist?.bonus_sms ? ` (含加油包+${stylist.bonus_sms})` : ''}</span>
+                  <span>💬 AI SMS Replies</span>
+                  <span>{stylist?.sms_used || 0} / {stylist?.sms_limit || 10}</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full transition-all ${smsPercent >= 100 ? 'bg-red-500' : smsPercent >= 80 ? 'bg-yellow-500' : 'bg-blue-600'}`} style={{ width: `${Math.min(100, smsPercent)}%` }} />
+                  <div className="h-full bg-blue-600 transition-all" style={{ width: `${Math.min(100, ((stylist?.sms_used || 0) / (stylist?.sms_limit || 10)) * 100)}%` }} />
                 </div>
               </div>
             </div>
-            <a href={addonUrl} className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition">
-              ⛽ $9.90 购买 100条短信/语音扩充包
-            </a>
           </div>
 
           <div className="flex flex-col gap-3">
             <Link href="/record" className="flex items-center justify-center gap-3 rounded-2xl bg-black p-4 text-base font-medium text-white shadow-md transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">🎙️</span> 录制配方
+              <span className="text-xl">🎙️</span> Record Formula
             </Link>
             <Link href="/clients" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">👥</span> 顾客列表
+              <span className="text-xl">👥</span> Client List
             </Link>
             <Link href="/inbox" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">📨</span> 对话记录
+              <span className="text-xl">💬</span> Inbox
             </Link>
-
-            <button
-              onClick={handleCalendarButtonClick}
-              className={`flex w-full items-center justify-center gap-3 rounded-2xl p-4 text-base font-medium text-white shadow-sm transition-transform hover:scale-[1.01] active:scale-95 border-0 cursor-pointer ${
-                isCalendarConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-[#4285F4]'
-              }`}
-            >
-              <span className="text-xl">📅</span> {isCalendarConnected ? '✓ 已连接，点击查看日历' : '连接 Google 日历'}
-            </button>
-
             <Link href="/settings" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">⚙️</span> 商家设置 (Settings)
+              <span className="text-xl">⚙️</span> Business Settings
             </Link>
+            <a href="/api/google/auth" className="flex items-center justify-center gap-3 rounded-2xl bg-[#4285F4] p-4 text-base font-medium text-white shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
+              <span className="text-xl">📅</span> Connect Google Calendar
+            </a>
           </div>
 
-          <div id="upgrade" className="mt-8 rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
-            <h2 className="text-base font-bold text-gray-900 mb-1">升级套餐</h2>
-            <p className="text-xs text-gray-400 mb-4">解锁更多语音与短信回复额度</p>
+          <div className="mt-8 rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Upgrade Plan</h2>
+            <p className="text-xs text-gray-400 mb-4">Unlock more voice & SMS reply credits</p>
             <div className="flex flex-col gap-3">
               <a href={proUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl bg-gray-900 p-3.5 text-white transition hover:bg-gray-800">
                 <div>
-                  <div className="font-medium text-sm">升级 Pro 个人版</div>
-                  <div className="text-[11px] text-gray-400">300次语音 + 200条短信/月</div>
+                  <div className="font-medium text-sm">Upgrade to Solo Pro</div>
+                  <div className="text-[11px] text-gray-400">300 voice + 200 SMS replies/mo</div>
                 </div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$30/月</span>
+                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$19.90/mo</span>
               </a>
               <a href={teamUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100">
                 <div>
-                  <div className="font-medium text-sm">升级 Team 沙龙版</div>
-                  <div className="text-[11px] text-gray-500">1000次语音 + 600条短信/月</div>
+                  <div className="font-medium text-sm">Upgrade to Team Salon</div>
+                  <div className="text-[11px] text-gray-500">1000 voice + 600 SMS replies/mo</div>
                 </div>
-                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$60/月</span>
+                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$29.90/mo</span>
+              </a>
+              <a href={addonUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100">
+                <div>
+                  <div className="font-medium text-sm">Buy Top-up Pack</div>
+                  <div className="text-[11px] text-gray-500">+100 voice/SMS credits</div>
+                </div>
+                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$9.90</span>
               </a>
             </div>
           </div>
 
           <button onClick={handleLogout} className="mt-8 w-full rounded-xl py-3 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors">
-            退出登录
+            Log Out
           </button>
         </div>
       </div>
     )
   }
-
+  // Not logged in: landing page
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-zinc-200">
       <nav className="flex items-center justify-between px-6 py-6 max-w-6xl mx-auto">
@@ -227,7 +149,7 @@ function HomeContent() {
           Focus on the hair.<br className="hidden md:block"/> Let AI handle the rest.
         </h1>
         <p className="text-lg md:text-xl text-zinc-500 max-w-2xl mx-auto mb-10">
-          Salon AI Assistant - Your Smart Voice & SMS Hairdresser Tool.
+          Salon AI Assistant — Your Smart Voice & SMS Hairdresser Tool.
           Record formulas with your voice and let AI automatically reply to your clients' booking texts.
         </p>
         <Link href="/login" className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-300">
@@ -241,15 +163,7 @@ function HomeContent() {
             <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
           </div>
           <div className="relative w-full bg-black">
-            <video
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-              controls
-              src="/demo.mp4"
-            >
+            <video className="w-full h-full object-cover" autoPlay muted loop playsInline controls src="/demo.mp4">
               Your browser does not support the video tag.
             </video>
           </div>
@@ -268,8 +182,8 @@ function HomeContent() {
               <h3 className="text-xl font-medium mb-2">Free Trial</h3>
               <div className="text-4xl font-bold mb-6">$0<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-500 space-y-3 mb-8 flex-1 text-sm">
-                <li>• 3 Voice Formulas</li>
-                <li>• 3 AI SMS Replies</li>
+                <li>• 10 Voice Formulas</li>
+                <li>• 10 AI SMS Replies</li>
                 <li>• Client Database</li>
               </ul>
               <Link href="/login" className="block text-center w-full py-3 rounded-xl bg-zinc-100 text-zinc-900 font-medium hover:bg-zinc-200 transition">
@@ -282,7 +196,7 @@ function HomeContent() {
                 Most Popular
               </div>
               <h3 className="text-xl font-medium mb-2">Solo Pro</h3>
-              <div className="text-4xl font-bold mb-6">$30<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
+              <div className="text-4xl font-bold mb-6">$19.90<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-400 space-y-3 mb-8 flex-1 text-sm">
                 <li>• 300 Voice Formulas/mo</li>
                 <li>• 200 AI SMS Replies/mo</li>
@@ -295,7 +209,7 @@ function HomeContent() {
 
             <div className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm flex flex-col">
               <h3 className="text-xl font-medium mb-2">Team Salon</h3>
-              <div className="text-4xl font-bold mb-6">$60<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
+              <div className="text-4xl font-bold mb-6">$29.90<span className="text-lg text-zinc-400 font-normal">/mo</span></div>
               <ul className="text-zinc-500 space-y-3 mb-8 flex-1 text-sm">
                 <li>• 1000 Voice Formulas/mo</li>
                 <li>• 600 AI SMS Replies/mo</li>
@@ -309,31 +223,16 @@ function HomeContent() {
         </div>
       </section>
 
-      <footer className="max-w-6xl mx-auto px-6 py-12">
-        <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-6">
-          <div className="text-zinc-400 text-sm">
-            © {new Date().getFullYear()} Veloceia. All rights reserved.
-          </div>
-          <div className="flex gap-6 text-sm font-medium text-zinc-500">
-            <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
-            <Link href="/terms" className="hover:text-black transition">Terms of Service</Link>
-            <Link href="/privacy" className="hover:text-black transition">Privacy Policy</Link>
-          </div>
+      <footer className="max-w-6xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="text-zinc-400 text-sm">
+          © {new Date().getFullYear()} Veloceia. All rights reserved.
         </div>
-        <div className="text-xs text-zinc-400 leading-relaxed border-t border-zinc-100 pt-6">
-          Veloceia Global<br />
-          No. 55 Xujiahuan, Jinniu Sector, Wuzhen,<br />
-          Tongxiang, Zhejiang, China, 314501
+        <div className="flex gap-6 text-sm font-medium text-zinc-500">
+          <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
+          <Link href="/terms" className="hover:text-black transition">Terms of Service</Link>
+          <Link href="/privacy" className="hover:text-black transition">Privacy Policy</Link>
         </div>
       </footer>
     </div>
-  )
-}
-
-export default function Home() {
-  return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-white"><div className="animate-pulse text-gray-400">Loading...</div></div>}>
-      <HomeContent />
-    </Suspense>
   )
 }
