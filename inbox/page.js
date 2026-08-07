@@ -15,7 +15,7 @@ export default function InboxPage() {
       const { data: stylist } = await supabase.from('stylists').select('id').eq('auth_user_id', user.id).maybeSingle()
       if (!stylist) { setLoading(false); return }
 
-      // 拉最近500条消息,按客户号码分组成会话列表
+      // Fetch the most recent 500 messages, grouped by client phone number into a conversation list
       const { data: messages } = await supabase
         .from('messages')
         .select('*')
@@ -44,7 +44,7 @@ export default function InboxPage() {
       const list = Object.values(grouped).sort(
         (a, b) => new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
       )
-      // messages目前是倒序(最新在前),会话内展示时反转成正序方便阅读
+      // messages are currently sorted newest-first; reverse to chronological order within each conversation for easier reading
       list.forEach(c => c.messages.reverse())
 
       setConversations(list)
@@ -56,25 +56,25 @@ export default function InboxPage() {
 
   const formatTime = (t) => {
     const d = new Date(t)
-    return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
     <div style={{ padding: '40px 20px', maxWidth: 900, margin: '0 auto', fontFamily: 'sans-serif' }}>
       <Link href="/" style={{ fontSize: 14, color: '#666', textDecoration: 'none', marginBottom: 20, display: 'inline-block' }}>
-        &larr; 返回首页
+        &larr; Back to Home
       </Link>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>📨 对话记录</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 20 }}>📨 Message History</h1>
 
-      {loading && <p style={{ color: '#999' }}>加载中...</p>}
+      {loading && <p style={{ color: '#999' }}>Loading...</p>}
 
       {!loading && conversations.length === 0 && (
-        <p style={{ color: '#999' }}>暂时还没有任何短信对话记录。</p>
+        <p style={{ color: '#999' }}>No SMS conversations yet.</p>
       )}
 
       {!loading && conversations.length > 0 && (
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-          {/* 左侧会话列表 */}
+          {/* Left: conversation list */}
           <div style={{ width: 280, flexShrink: 0, border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' }}>
             {conversations.map(c => (
               <div
@@ -89,17 +89,17 @@ export default function InboxPage() {
               >
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name || c.phone_number}</div>
                 <div style={{ fontSize: 12, color: '#888', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {c.lastMessage.direction === 'outbound' ? '我方: ' : ''}{c.lastMessage.body}
+                  {c.lastMessage.direction === 'outbound' ? 'Us: ' : ''}{c.lastMessage.body}
                 </div>
                 <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>{formatTime(c.lastMessage.created_at)}</div>
               </div>
             ))}
           </div>
 
-          {/* 右侧对话详情 */}
+          {/* Right: conversation detail */}
           <div style={{ flex: 1, border: '1px solid #eee', borderRadius: 12, minHeight: 400, padding: 16 }}>
             {!selected && (
-              <p style={{ color: '#999', textAlign: 'center', marginTop: 100 }}>选择左侧一个对话查看详情</p>
+              <p style={{ color: '#999', textAlign: 'center', marginTop: 100 }}>Select a conversation on the left to view details</p>
             )}
             {selected && (
               <>
