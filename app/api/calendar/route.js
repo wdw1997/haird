@@ -5,11 +5,10 @@ import { createClient } from '@supabase/supabase-js'
 export async function GET(req) {
   const supabaseAdmin = getSupabaseAdmin()
 
-  // 1. 验证登录
   const authHeader = req.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
   if (!token) {
-    return Response.json({ error: '请先登录' }, { status: 401 })
+    return Response.json({ error: 'Please log in first' }, { status: 401 })
   }
 
   const supabaseAuth = createClient(
@@ -18,10 +17,9 @@ export async function GET(req) {
   )
   const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token)
   if (authError || !userData?.user) {
-    return Response.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    return Response.json({ error: 'Session expired, please log in again' }, { status: 401 })
   }
 
-  // 2. 找到对应的 stylist
   const { data: stylist } = await supabaseAdmin
     .from('stylists')
     .select('id, google_cal_refresh_token_encrypted')
@@ -29,26 +27,24 @@ export async function GET(req) {
     .maybeSingle()
 
   if (!stylist) {
-    return Response.json({ error: '未找到账号信息' }, { status: 404 })
+    return Response.json({ error: 'Account not found' }, { status: 404 })
   }
 
   if (!stylist.google_cal_refresh_token_encrypted) {
-    return Response.json({ error: '尚未连接 Google 日历，请先在首页点击连接' }, { status: 400 })
+    return Response.json({ error: 'Google Calendar is not connected yet — please connect it from the home page first' }, { status: 400 })
   }
 
   try {
-    // 3. 解密拿到 refresh_token
     const { data: refreshToken, error: decryptError } = await supabaseAdmin.rpc('decrypt_stylist_token', {
       p_stylist_id: stylist.id,
       p_key: process.env.TOKEN_ENCRYPTION_KEY,
     })
 
     if (decryptError || !refreshToken) {
-      console.error('解密 token 失败:', decryptError)
-      return Response.json({ error: '读取授权信息失败，请重新连接 Google 日历' }, { status: 500 })
+      console.error('Failed to decrypt token:', decryptError)
+      return Response.json({ error: 'Failed to read authorization info — please reconnect Google Calendar' }, { status: 500 })
     }
 
-    // 4. 用 refresh_token 换 access_token 并调用 Google Calendar API
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -72,19 +68,17 @@ export async function GET(req) {
 
     const events = (result.data.items || []).map((event) => ({
       id: event.id,
-      title: event.summary || '(无标题)',
+      title: event.summary || '(No title)',
       start: event.start?.dateTime || event.start?.date,
       end: event.end?.dateTime || event.end?.date,
     }))
 
     return Response.json({ events })
   } catch (err) {
-    // refresh_token 失效（比如用户在 Google 账号权限里手动撤销了授权）时，
-    // googleapis 通常会抛 invalid_grant 错误，这里单独识别出来给出更清楚的提示
     const message = err?.response?.data?.error === 'invalid_grant'
-      ? '授权已失效，请重新连接 Google 日历'
-      : '读取日历失败，请稍后重试'
-    console.error('读取 Google 日历失败:', err)
+      ? 'Authorization has expired — please reconnect Google Calendar'
+      : 'Failed to load calendar — please try again later'
+    console.error('Failed to load Google Calendar:', err)
     return Response.json({ error: message }, { status: 500 })
   }
 }
