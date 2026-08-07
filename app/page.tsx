@@ -32,11 +32,11 @@ function HomeContent() {
   useEffect(() => {
     const calendarStatus = searchParams.get('calendar')
     const messages: Record<string, string> = {
-      connected: '✅ Google 日历已成功连接',
-      cancelled: '已取消授权',
-      no_refresh_token: '⚠️ 未获取到有效授权，请重新连接（如果之前已授权过，去 Google 账号权限里撤销后重试）',
-      save_failed: '❌ 保存授权信息失败，请重试或联系客服',
-      error: '❌ 连接失败，请重试',
+      connected: '✅ Google Calendar connected successfully',
+      cancelled: 'Authorization cancelled',
+      no_refresh_token: '⚠️ No valid authorization received. Please reconnect (if you\'ve authorized before, revoke access in your Google account permissions and try again).',
+      save_failed: '❌ Failed to save authorization. Please try again or contact support.',
+      error: '❌ Connection failed. Please try again.',
     }
     if (calendarStatus && messages[calendarStatus]) {
       setCalendarMsg(messages[calendarStatus])
@@ -57,7 +57,7 @@ function HomeContent() {
     })
     const data = await res.json()
     if (data.url) window.location.href = data.url
-    else alert(data.error || '连接失败')
+    else alert(data.error || 'Connection failed')
   }
 
   const isCalendarConnected = !!stylist?.google_cal_refresh_token_encrypted
@@ -79,7 +79,7 @@ function HomeContent() {
     const teamUrl = stylist ? `/api/checkout?plan=team&stylist=${stylist.id}` : '#'
     const addonUrl = stylist ? `/api/checkout?plan=addon&stylist=${stylist.id}` : '#'
 
-    // 🔥 有效额度 = 套餐额度 + 加油包额度
+    // 🔥 Effective limit = plan limit + top-up pack limit
     const effectiveSmsLimit = (stylist?.sms_limit || 3) + (stylist?.bonus_sms || 0)
     const effectiveVoiceLimit = (stylist?.voice_limit || 3) + (stylist?.bonus_voice || 0)
     const smsUsed = stylist?.sms_used || 0
@@ -95,7 +95,7 @@ function HomeContent() {
         <div className="mx-auto max-w-md">
           <header className="mb-8 text-center">
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">Salon AI</h1>
-            <p className="text-sm text-gray-500 mt-2">智能发型师配方与短信助手</p>
+            <p className="text-sm text-gray-500 mt-2">Smart Hairdresser Formula & SMS Assistant</p>
           </header>
 
           {calendarMsg && (
@@ -104,32 +104,32 @@ function HomeContent() {
             </div>
           )}
 
-          {/* 🔥 100%额度耗尽:强制拦截提示 */}
+          {/* 🔥 100% limit exhausted: hard block notice */}
           {isExhausted && (
             <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-              <div className="font-bold mb-1">⛔ 额度已耗尽</div>
-              <p className="mb-3">AI 助理已暂停自动回复，请购买加油包或升级套餐以恢复服务。</p>
+              <div className="font-bold mb-1">⛔ Limit reached</div>
+              <p className="mb-3">Your AI assistant has paused auto-replies. Buy a top-up pack or upgrade your plan to resume service.</p>
               <div className="flex gap-2">
                 <a href={addonUrl} className="flex-1 text-center bg-red-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-red-700 transition">
-                  $9.90 购买加油包
+                  $9.90 Buy Top-up Pack
                 </a>
                 <Link href="#upgrade" className="flex-1 text-center bg-white border border-red-300 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-50 transition">
-                  升级套餐
+                  Upgrade Plan
                 </Link>
               </div>
             </div>
           )}
 
-          {/* 🔥 80%额度预警:黄色横幅 */}
+          {/* 🔥 80% limit warning: yellow banner */}
           {isNearLimit && !isExhausted && (
             <div className="mb-6 rounded-xl bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800 text-center">
-              您的本月额度已使用 {Math.round(maxPercent)}%，请留意。
+              You've used {Math.round(maxPercent)}% of your monthly limit. Please keep an eye on it.
             </div>
           )}
 
           <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-sm font-medium text-gray-500">当前版本</span>
+              <span className="text-sm font-medium text-gray-500">Current Plan</span>
               <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase ${stylist?.plan_type === 'free' ? 'bg-gray-100 text-gray-600' : 'bg-black text-white'}`}>
                 {stylist?.plan_type || 'FREE'}
               </span>
@@ -137,8 +137,8 @@ function HomeContent() {
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>🎙️ 语音配方识别</span>
-                  <span>{voiceUsed} / {effectiveVoiceLimit} 次{stylist?.bonus_voice ? ` (含加油包+${stylist.bonus_voice})` : ''}</span>
+                  <span>🎙️ Voice Formula Recognition</span>
+                  <span>{voiceUsed} / {effectiveVoiceLimit} uses{stylist?.bonus_voice ? ` (incl. top-up +${stylist.bonus_voice})` : ''}</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full transition-all ${voicePercent >= 100 ? 'bg-red-500' : voicePercent >= 80 ? 'bg-yellow-500' : 'bg-black'}`} style={{ width: `${Math.min(100, voicePercent)}%` }} />
@@ -146,8 +146,8 @@ function HomeContent() {
               </div>
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>💬 短信自动回复</span>
-                  <span>{smsUsed} / {effectiveSmsLimit} 条{stylist?.bonus_sms ? ` (含加油包+${stylist.bonus_sms})` : ''}</span>
+                  <span>💬 SMS Auto-Reply</span>
+                  <span>{smsUsed} / {effectiveSmsLimit} messages{stylist?.bonus_sms ? ` (incl. top-up +${stylist.bonus_sms})` : ''}</span>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full transition-all ${smsPercent >= 100 ? 'bg-red-500' : smsPercent >= 80 ? 'bg-yellow-500' : 'bg-blue-600'}`} style={{ width: `${Math.min(100, smsPercent)}%` }} />
@@ -155,19 +155,19 @@ function HomeContent() {
               </div>
             </div>
             <a href={addonUrl} className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition">
-              ⛽ $9.90 购买 100条短信/语音扩充包
+              ⛽ $9.90 Buy 100 SMS / Voice Top-up Pack
             </a>
           </div>
 
           <div className="flex flex-col gap-3">
             <Link href="/record" className="flex items-center justify-center gap-3 rounded-2xl bg-black p-4 text-base font-medium text-white shadow-md transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">🎙️</span> 录制配方
+              <span className="text-xl">🎙️</span> Record Formula
             </Link>
             <Link href="/clients" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">👥</span> 顾客列表
+              <span className="text-xl">👥</span> Client List
             </Link>
             <Link href="/inbox" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">📨</span> 对话记录
+              <span className="text-xl">📨</span> Conversation History
             </Link>
 
             <button
@@ -176,37 +176,37 @@ function HomeContent() {
                 isCalendarConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-[#4285F4]'
               }`}
             >
-              <span className="text-xl">📅</span> {isCalendarConnected ? '✓ 已连接，点击查看日历' : '连接 Google 日历'}
+              <span className="text-xl">📅</span> {isCalendarConnected ? '✓ Connected — tap to view calendar' : 'Connect Google Calendar'}
             </button>
 
             <Link href="/settings" className="flex items-center justify-center gap-3 rounded-2xl bg-white border border-gray-200 p-4 text-base font-medium text-gray-900 shadow-sm transition-transform hover:scale-[1.01] active:scale-95">
-              <span className="text-xl">⚙️</span> 商家设置 (Settings)
+              <span className="text-xl">⚙️</span> Business Settings
             </Link>
           </div>
 
           <div id="upgrade" className="mt-8 rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
-            <h2 className="text-base font-bold text-gray-900 mb-1">升级套餐</h2>
-            <p className="text-xs text-gray-400 mb-4">解锁更多语音与短信回复额度</p>
+            <h2 className="text-base font-bold text-gray-900 mb-1">Upgrade Plan</h2>
+            <p className="text-xs text-gray-400 mb-4">Unlock more voice and SMS reply capacity</p>
             <div className="flex flex-col gap-3">
               <a href={proUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl bg-gray-900 p-3.5 text-white transition hover:bg-gray-800">
                 <div>
-                  <div className="font-medium text-sm">升级 Pro 个人版</div>
-                  <div className="text-[11px] text-gray-400">300次语音 + 200条短信/月</div>
+                  <div className="font-medium text-sm">Upgrade to Solo Pro</div>
+                  <div className="text-[11px] text-gray-400">300 voice uses + 200 SMS / month</div>
                 </div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$30/月</span>
+                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$30/mo</span>
               </a>
               <a href={teamUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100">
                 <div>
-                  <div className="font-medium text-sm">升级 Team 沙龙版</div>
-                  <div className="text-[11px] text-gray-500">1000次语音 + 600条短信/月</div>
+                  <div className="font-medium text-sm">Upgrade to Team Salon</div>
+                  <div className="text-[11px] text-gray-500">1000 voice uses + 600 SMS / month</div>
                 </div>
-                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$60/月</span>
+                <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$60/mo</span>
               </a>
             </div>
           </div>
 
           <button onClick={handleLogout} className="mt-8 w-full rounded-xl py-3 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors">
-            退出登录
+            Log Out
           </button>
         </div>
       </div>
