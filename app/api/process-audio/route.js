@@ -10,30 +10,30 @@ export async function POST(req) {
   const authHeader = req.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
   if (!token) {
-    return Response.json({ error: '请先登录' }, { status: 401 })
+    return Response.json({ error: 'Please log in first' }, { status: 401 })
   }
 
   const supabaseAuth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token)
   if (authError || !userData?.user) {
-    return Response.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    return Response.json({ error: 'Session expired, please log in again' }, { status: 401 })
   }
 
   const { data: stylist } = await supabaseAdmin
     .from('stylists').select('*').eq('auth_user_id', userData.user.id).maybeSingle()
   if (!stylist) {
-    return Response.json({ error: '未找到账号信息' }, { status: 404 })
+    return Response.json({ error: 'Account not found' }, { status: 404 })
   }
 
   if (isQuotaExceeded(stylist, 'voice')) {
-    return Response.json({ error: '本月语音额度已用完，请购买加油包或升级套餐' }, { status: 403 })
+    return Response.json({ error: 'Your monthly voice quota is used up — please buy a top-up pack or upgrade your plan' }, { status: 403 })
   }
 
   const formData = await req.formData()
   const audioFile = formData.get('audio')
   const clientId = formData.get('clientId') || null
   if (!audioFile) {
-    return Response.json({ error: '未收到音频文件' }, { status: 400 })
+    return Response.json({ error: 'No audio file received' }, { status: 400 })
   }
 
   const transcription = await whisperClient.audio.transcriptions.create({
@@ -47,9 +47,9 @@ export async function POST(req) {
     model: QWEN_MODEL,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: `你是一个专业的美发助理，负责从语音转写文本中提取染发/美发配方信息，返回JSON:
-      {"customer_name": "客户姓名", "service_type": "服务类型", "formula": "配方细节", "notes": "备注"}
-      规则：只提取原文中明确提到的信息，没提到的字段留空字符串，不要编造内容。` },
+      { role: 'system', content: `You are a professional hairdressing assistant responsible for extracting hair color/formula information from a voice transcript and returning JSON:
+      {"customer_name": "customer name", "service_type": "service type", "formula": "formula details", "notes": "notes"}
+      Rules: only extract information explicitly mentioned in the text; leave fields not mentioned as an empty string; do not make anything up.` },
       { role: 'user', content: text },
     ],
   })
