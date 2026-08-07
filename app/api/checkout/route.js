@@ -6,7 +6,7 @@ export async function GET(req) {
   const stylistId = searchParams.get('stylist')
 
   if (!stylistId) {
-    return new Response('缺少 stylist 参数', { status: 400 })
+    return new Response('Missing stylist parameter', { status: 400 })
   }
 
   let productId
@@ -23,8 +23,8 @@ export async function GET(req) {
   }
 
   if (!productId) {
-    console.error('未配置对应的 Creem Product ID, plan:', plan)
-    return new Response('套餐配置错误，请联系客服', { status: 500 })
+    console.error('No matching Creem Product ID configured, plan:', plan)
+    return new Response('Plan configuration error — please contact support', { status: 500 })
   }
 
   try {
@@ -45,16 +45,16 @@ export async function GET(req) {
     const data = await res.json()
 
     if (!res.ok || !data.checkout_url) {
-      console.error('Creem checkout 创建失败:', res.status, JSON.stringify(data))
+      console.error('Failed to create Creem checkout:', res.status, JSON.stringify(data))
       return new Response(
-        `创建支付链接失败：${data.message || data.error || '未知错误'}`,
+        `Failed to create payment link: ${data.message || data.error || 'Unknown error'}`,
         { status: 500 }
       )
     }
 
     return Response.redirect(data.checkout_url)
   } catch (err) {
-    console.error('调用 Creem API 出错:', err)
-    return new Response('创建支付链接失败，请稍后重试', { status: 500 })
+    console.error('Error calling Creem API:', err)
+    return new Response('Failed to create payment link — please try again later', { status: 500 })
   }
 }
