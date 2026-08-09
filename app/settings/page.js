@@ -26,6 +26,7 @@ function SettingsContent() {
     timezone: 'America/New_York',
   })
   const [status, setStatus] = useState('')
+  const [copyStatus, setCopyStatus] = useState('')
 
   const [calendarEvents, setCalendarEvents] = useState([])
   const [loadingCalendar, setLoadingCalendar] = useState(false)
@@ -198,6 +199,34 @@ function SettingsContent() {
       </Link>
 
       <h1>Business Settings</h1>
+
+      {stylistId && (
+        <div style={{ padding: 20, background: '#ecfdf5', borderRadius: 12, marginTop: 20, border: '1px solid #a7f3d0' }}>
+          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 6 }}>🔗 Your Booking Page</h2>
+          <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 10 }}>
+            Share this link with customers (Instagram bio, texts, your Google listing) so they can request an appointment themselves.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              readOnly
+              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/book/${stylistId}`}
+              style={{ ...input, background: 'white', fontSize: 13, color: '#333' }}
+              onFocus={(e) => e.target.select()}
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/book/${stylistId}`)
+                setCopyStatus('Copied!')
+                setTimeout(() => setCopyStatus(''), 2000)
+              }}
+              style={{ padding: '0 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              Copy Link
+            </button>
+          </div>
+          {copyStatus && <p style={{ marginTop: 8, fontSize: 13, color: '#16a34a' }}>{copyStatus}</p>}
+        </div>
+      )}
 
       {pendingRequests.length > 0 && (
         <div style={{ padding: 20, background: '#fff8e6', borderRadius: 12, marginTop: 20, border: '1px solid #ffe4a3' }}>
