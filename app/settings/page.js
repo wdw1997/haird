@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern (New York)' },
@@ -11,8 +13,10 @@ const TIMEZONES = [
   { value: 'Asia/Shanghai', label: 'China (Shanghai)' },
 ]
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const searchParams = useSearchParams()
   const [stylistId, setStylistId] = useState(null)
+  const [instagramMsg, setInstagramMsg] = useState('')
   const [form, setForm] = useState({
     business_name: '', address: '', contact_phone: '',
     business_hours_text: '', services_text: '',
@@ -64,6 +68,26 @@ export default function SettingsPage() {
       setPendingRequests(requests || [])
     })()
   }, [])
+
+  useEffect(() => {
+    const igStatus = searchParams.get('instagram')
+    const messages = {
+      connected: '✅ Instagram connected successfully',
+      cancelled: 'Authorization cancelled',
+      save_failed: '❌ Failed to save Instagram authorization. Please try again.',
+      error: '❌ Instagram connection failed. Please try again.',
+    }
+    if (igStatus && messages[igStatus]) setInstagramMsg(messages[igStatus])
+  }, [searchParams])
+
+  const handleConnectInstagram = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/instagram/auth', { headers: { Authorization: `Bearer ${session.access_token}` } })
+    const data = await res.json()
+    if (data.url) window.location.href = data.url
+    else alert(data.error || 'Connection failed')
+  }
 
   const handleSave = async () => {
     setStatus('Saving...')
@@ -232,6 +256,15 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <div style={{ padding: 20, background: '#fdf2f8', borderRadius: 12, marginTop: 10, marginBottom: 20, border: '1px solid #fbcfe8' }}>
+        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📷 Instagram DM</h2>
+        <p style={{ fontSize: 13, color: '#666', marginTop: 0 }}>Let the AI assistant reply to Instagram DMs the same way it replies to texts.</p>
+        {instagramMsg && <p style={{ fontSize: 13, marginBottom: 10 }}>{instagramMsg}</p>}
+        <button onClick={handleConnectInstagram} style={{ width: '100%', padding: 10, background: '#db2777', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+          Connect Instagram
+        </button>
+      </div>
+
       <label style={label}>🌍 Business Timezone (affects AI scheduling accuracy)</label>
       <select style={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
         {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
@@ -281,5 +314,13 @@ export default function SettingsPage() {
       </button>
       {status && <p style={{ marginTop: 12, color: '#666' }}>{status}</p>}
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading...</div>}>
+      <SettingsContent />
+    </Suspense>
   )
 }
