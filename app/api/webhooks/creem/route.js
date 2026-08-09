@@ -9,7 +9,7 @@ const PLAN_LIMITS = {
   team: { sms_limit: 600, voice_limit: 1000 },
 }
 
-// $9.90 加油包一次性增加的额度
+// Quota granted by the one-time $9.90 top-up pack
 const ADDON_SMS = 100
 const ADDON_VOICE = 100
 
@@ -29,7 +29,7 @@ export async function POST(req) {
   const signature = req.headers.get('creem-signature')
 
   if (!verifySignature(rawBody, signature, process.env.CREEM_WEBHOOK_SECRET)) {
-    console.error('Creem webhook 签名验证失败')
+    console.error('Creem webhook signature verification failed')
     return new Response('Invalid signature', { status: 401 })
   }
 
@@ -64,19 +64,19 @@ export async function POST(req) {
         const stylistId = metadata.stylist_id
 
         if (!stylistId) {
-          console.error('webhook缺少stylist_id:', metadata)
+          console.error('Webhook missing stylist_id:', metadata)
           break
         }
 
         if (metadata.type === 'addon') {
-          // 加油包是一次性购买,只叠加额度,不影响套餐本身
+          // Top-up pack is a one-time purchase — only adds bonus quota, doesn't change the plan itself
           const { data: stylist } = await supabaseAdmin
             .from('stylists').select('bonus_sms, bonus_voice').eq('id', stylistId).maybeSingle()
           if (stylist) {
             await supabaseAdmin.from('stylists').update({
               bonus_sms: (stylist.bonus_sms || 0) + ADDON_SMS,
               bonus_voice: (stylist.bonus_voice || 0) + ADDON_VOICE,
-              // 额度增加了,重新允许下次触发80%/100%预警
+              // Quota went up — allow the 80%/100% warnings to fire again next time
               sms_80_notified: false,
               sms_100_notified: false,
               voice_80_notified: false,
@@ -86,10 +86,10 @@ export async function POST(req) {
           break
         }
 
-        // 走到这里说明是订阅套餐首次开通
+        // Otherwise this is a subscription plan being activated for the first time
         const plan = metadata.plan
         if (!plan || !PLAN_LIMITS[plan]) {
-          console.error('webhook缺少有效plan:', metadata)
+          console.error('Webhook missing a valid plan:', metadata)
           break
         }
         const limits = PLAN_LIMITS[plan]
@@ -109,14 +109,14 @@ export async function POST(req) {
         break
       }
 
-      // 每期续费成功:刷新用量、清空上个周期的加油包和预警标记
+      // Each successful renewal: reset usage, clear last cycle's top-up pack and warning flags
       case 'subscription.paid': {
         const metadata = payload.object?.metadata || {}
         const stylistId = metadata.stylist_id
         const plan = metadata.plan
 
         if (!stylistId || !plan || !PLAN_LIMITS[plan]) {
-          console.error('webhook缺少必要metadata:', metadata)
+          console.error('Webhook missing required metadata:', metadata)
           break
         }
 
@@ -143,7 +143,7 @@ export async function POST(req) {
         const stylistId = metadata.stylist_id
 
         if (!stylistId) {
-          console.error('webhook缺少stylist_id,无法降级:', metadata)
+          console.error('Webhook missing stylist_id, cannot downgrade:', metadata)
           break
         }
 
@@ -163,7 +163,7 @@ export async function POST(req) {
       }
 
       case 'subscription.past_due': {
-        console.warn('订阅续费失败,等待Creem自动重试:', payload.object?.id)
+        console.warn('Subscription renewal failed, waiting for Creem to auto-retry:', payload.object?.id)
         break
       }
 
@@ -175,7 +175,7 @@ export async function POST(req) {
 
     return new Response('OK', { status: 200 })
   } catch (err) {
-    console.error('处理 Creem webhook 出错:', err)
+    console.error('Error processing Creem webhook:', err)
     return new Response('Internal error', { status: 500 })
   }
 }
