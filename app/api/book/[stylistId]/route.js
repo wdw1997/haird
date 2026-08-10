@@ -1,175 +1,112 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { sendEmail } from '@/lib/resend-client'
 
-export default function PublicBookingPage() {
-  const { stylistId } = useParams()
+export const dynamic = 'force-dynamic'
 
-  const [biz, setBiz] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+function publicBusinessView(biz, stylistName) {
+  return {
+    business_name: biz?.business_name || stylistName || 'Book an appointment',
+    address: biz?.address || null,
+    contact_phone: biz?.contact_phone || null,
+    services: Array.isArray(biz?.services) ? biz.services : [],
+  }
+}
 
-  const [form, setForm] = useState({ name: '', phone: '', service: '', message: '', agreed: false })
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  const [error, setError] = useState('')
+function isPlausiblePhone(phone) {
+  const digits = (phone || '').replace(/[^\d]/g, '')
+  return digits.length >= 10 && digits.length <= 15
+}
 
-  useEffect(() => {
-    if (!stylistId) return
-    fetch(`/api/book/${stylistId}`)
-      .then(async (res) => {
-        if (!res.ok) { setNotFound(true); return }
-        setBiz(await res.json())
-      })
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false))
-  }, [stylistId])
+export async function GET(req, { params }) {
+  const { stylistId } = params
+  const supabaseAdmin = getSupabaseAdmin()
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-
-    if (!form.phone.trim()) {
-      setError('Please enter your phone number.')
-      return
-    }
-    if (!form.agreed) {
-      setError('Please check the box to agree to receive text messages.')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const res = await fetch(`/api/book/${stylistId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Something went wrong. Please try again.')
-        setSubmitting(false)
-        return
-      }
-      setSubmitted(true)
-    } catch {
-      setError('Something went wrong. Please try again.')
-    }
-    setSubmitting(false)
+  const { data: stylist } = await supabaseAdmin
+    .from('stylists').select('id, name').eq('id', stylistId).maybeSingle()
+  if (!stylist) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const input = { padding: 12, borderRadius: 8, border: '1px solid #ccc', width: '100%', fontSize: 15, boxSizing: 'border-box' }
-  const label = { fontWeight: 600, marginTop: 16, marginBottom: 6, display: 'block', fontSize: 14 }
+  const { data: biz } = await supabaseAdmin
+    .from('business_settings').select('*').eq('stylist_id', stylistId).maybeSingle()
 
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading...</div>
+  return Response.json(publicBusinessView(biz, stylist.name))
+}
+
+export async function POST(req, { params }) {
+  const { stylistId } = params
+  const supabaseAdmin = getSupabaseAdmin()
+
+  let body
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  if (notFound) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>
-        This booking page isn't available.
-      </div>
-    )
+  const phone = (body.phone || '').trim()
+  const name = (body.name || '').trim().slice(0, 100)
+  const message = (body.message || '').trim().slice(0, 500)
+  const service = (body.service || '').trim().slice(0, 100)
+  const agreed = body.agreed === true
+
+  if (!isPlausiblePhone(phone)) {
+    return Response.json({ error: 'Please enter a valid phone number.' }, { status: 400 })
+  }
+  if (!agreed) {
+    return Response.json({ error: 'Please confirm you agree to receive text messages.' }, { status: 400 })
   }
 
-  if (submitted) {
-    return (
-      <div style={{ maxWidth: 480, margin: '80px auto', padding: 32, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-        <h1 style={{ fontSize: 22, marginBottom: 8 }}>Request received!</h1>
-        <p style={{ color: '#666', fontSize: 15 }}>
-          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} will text you shortly to confirm.
-        </p>
-      </div>
-    )
+  const { data: stylist } = await supabaseAdmin
+    .from('stylists').select('id, name, email').eq('id', stylistId).maybeSingle()
+  if (!stylist) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '40px 24px' }}>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>{biz?.business_name || 'Book an appointment'}</h1>
-      {biz?.address && <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>{biz.address}</p>}
-      <p style={{ color: '#666', fontSize: 15, marginTop: 16 }}>
-        Tell us what you're looking for and we'll text you to confirm a time.
-      </p>
+  const digits = phone.replace(/[^\d]/g, '')
+  const normalizedPhone = digits.length === 10 ? `+1${digits}` : `+${digits}`
 
-      {biz?.services?.length > 0 && (
-        <div style={{ margin: '16px 0', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {biz.services.map((s, i) => (
-            <span key={i} style={{ background: '#f1f1f1', borderRadius: 20, padding: '4px 12px', fontSize: 13, color: '#444' }}>
-              {typeof s === 'string' ? s : s.name}
-            </span>
-          ))}
-        </div>
-      )}
+  let matchedClientId = null
+  const { data: existingClient } = await supabaseAdmin
+    .from('clients').select('id').eq('phone_number', normalizedPhone).eq('stylist_id', stylistId).maybeSingle()
+  if (existingClient) {
+    matchedClientId = existingClient.id
+  } else {
+    const { data: newClient } = await supabaseAdmin
+      .from('clients').insert({ stylist_id: stylistId, phone_number: normalizedPhone, name: name || null, channel: 'web' })
+      .select('id').single()
+    if (newClient) matchedClientId = newClient.id
+  }
 
-      <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
-        <label style={label}>Your name</label>
-        <input
-          style={input}
-          placeholder="Jane Smith"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
+  const { data: request, error } = await supabaseAdmin
+    .from('appointment_requests')
+    .insert({
+      stylist_id: stylistId,
+      client_id: matchedClientId,
+      phone_number: normalizedPhone,
+      service_type: service || null,
+      notes: message || null,
+      status: 'new',
+    })
+    .select('id').single()
 
-        <label style={label}>Phone number *</label>
-        <input
-          style={input}
-          type="tel"
-          placeholder="(555) 123-4567"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          required
-        />
+  if (error) {
+    console.error('Failed to save booking request:', error)
+    return Response.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
+  }
 
-        <label style={label}>What are you looking for?</label>
-        <input
-          style={input}
-          placeholder="e.g. Haircut, Color, Balayage"
-          value={form.service}
-          onChange={(e) => setForm({ ...form, service: e.target.value })}
-        />
+  if (stylist.email) {
+    await sendEmail({
+      to: stylist.email,
+      subject: `New booking request from ${name || normalizedPhone}`,
+      html: `<p>You have a new request from your booking page.</p>
+        <p><strong>Name:</strong> ${name || 'Not provided'}<br/>
+        <strong>Phone:</strong> ${normalizedPhone}<br/>
+        <strong>Service:</strong> ${service || 'Not specified'}</p>
+        ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
+        <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/settings">View in your dashboard</a></p>`,
+    })
+  }
 
-        <label style={label}>Anything else we should know? (optional)</label>
-        <textarea
-          style={{ ...input, height: 70, resize: 'vertical' }}
-          placeholder="Preferred day/time, any details..."
-          value={form.message}
-          onChange={(e) => setForm({ ...form, message: e.target.value })}
-        />
-
-        {/* Opt-in language — must stay directly next to the phone input and
-            submit button for SMS carrier / toll-free verification purposes.
-            Do not move this into a separate page or a collapsed section. */}
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 18, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={form.agreed}
-            onChange={(e) => setForm({ ...form, agreed: e.target.checked })}
-            style={{ marginTop: 2 }}
-            required
-          />
-          <span>
-            By submitting this form, you agree to receive SMS text messages from{' '}
-            {biz?.business_name || 'this business'} regarding your inquiry/appointments.
-            Message and data rates may apply. Reply STOP to opt out.
-          </span>
-        </label>
-
-        {error && <p style={{ color: '#d93025', fontSize: 13, marginTop: 12 }}>{error}</p>}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            width: '100%', marginTop: 20, padding: 14, background: submitting ? '#999' : '#2563eb',
-            color: 'white', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 600,
-            cursor: submitting ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {submitting ? 'Sending...' : 'Book Now'}
-        </button>
-      </form>
-    </div>
-  )
+  return Response.json({ success: true, id: request.id })
 }
