@@ -138,9 +138,6 @@ export default function PublicBookingPage() {
           onChange={(e) => setForm({ ...form, message: e.target.value })}
         />
 
-        {/* Opt-in language — must stay directly next to the phone input and
-            submit button for SMS carrier / toll-free verification purposes.
-            Do not move this into a separate page or a collapsed section. */}
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 18, fontSize: 13, color: '#555', cursor: 'pointer' }}>
           <input
             type="checkbox"
