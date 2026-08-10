@@ -1,5 +1,7 @@
 import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { provisionPhoneNumber } from '@/lib/provision-number'
+import { sendEmail } from '@/lib/resend-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,6 +108,31 @@ export async function POST(req) {
           voice_80_notified: false,
           voice_100_notified: false,
         }).eq('id', stylistId)
+
+        // Trial users never get a real number (see lib/provision-number.js) —
+        // this is the one moment a number actually gets bought and billed.
+        // Only do this once: a stylist who already has a number (e.g.
+        // re-subscribing after a downgrade) keeps the one they had.
+        const { data: freshStylist } = await supabaseAdmin
+          .from('stylists').select('twilio_number, name, email').eq('id', stylistId).maybeSingle()
+
+        if (freshStylist && !freshStylist.twilio_number) {
+          const purchasedNumber = await provisionPhoneNumber({})
+          if (purchasedNumber) {
+            await supabaseAdmin.from('stylists').update({ twilio_number: purchasedNumber }).eq('id', stylistId)
+          } else {
+            // Don't block the paid activation on this — flag it and alert an
+            // admin to provision the number manually instead.
+            await supabaseAdmin.from('stylists').update({ needs_number_provisioning: true }).eq('id', stylistId)
+            if (process.env.ADMIN_ALERT_EMAIL) {
+              await sendEmail({
+                to: process.env.ADMIN_ALERT_EMAIL,
+                subject: `⚠️ Number provisioning failed for stylist ${stylistId}`,
+                html: `<p>Automatic number purchase failed for ${freshStylist.name || stylistId} (${freshStylist.email || 'no email'}) after a successful checkout. Please provision a number manually in Twilio and set it in Supabase (stylists.twilio_number).</p>`,
+              })
+            }
+          }
+        }
         break
       }
 
