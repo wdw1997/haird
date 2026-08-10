@@ -27,6 +27,8 @@ function SettingsContent() {
   })
   const [status, setStatus] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
+  const [planType, setPlanType] = useState('free')
+  const [hasNumber, setHasNumber] = useState(true)
 
   const [calendarEvents, setCalendarEvents] = useState([])
   const [loadingCalendar, setLoadingCalendar] = useState(false)
@@ -41,9 +43,11 @@ function SettingsContent() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: stylist } = await supabase.from('stylists').select('id').eq('auth_user_id', user.id).maybeSingle()
+      const { data: stylist } = await supabase.from('stylists').select('id, plan_type, twilio_number').eq('auth_user_id', user.id).maybeSingle()
       if (!stylist) return
       setStylistId(stylist.id)
+      setPlanType(stylist.plan_type || 'free')
+      setHasNumber(!!stylist.twilio_number)
 
       const { data: biz } = await supabase.from('business_settings').select('*').eq('stylist_id', stylist.id).maybeSingle()
       if (biz) {
@@ -199,6 +203,28 @@ function SettingsContent() {
       </Link>
 
       <h1>Business Settings</h1>
+
+      {stylistId && !hasNumber && (
+        <div style={{ padding: 20, background: '#eff6ff', borderRadius: 12, marginTop: 20, border: '1px solid #bfdbfe' }}>
+          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 6 }}>💬 Try Your AI Assistant</h2>
+          <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 12 }}>
+            {planType === 'free'
+              ? "You're on a free trial, so you don't have a dedicated phone number yet — but you can still test exactly how your AI assistant will respond to customers."
+              : "Your number is still being set up. In the meantime, you can test your AI assistant here."}
+          </p>
+          <Link href="/demo" style={{
+            display: 'inline-block', padding: '10px 20px', background: '#2563eb', color: 'white',
+            borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 14,
+          }}>
+            Open Demo Chat →
+          </Link>
+          {planType === 'free' && (
+            <p style={{ fontSize: 12, color: '#888', marginTop: 10, marginBottom: 0 }}>
+              🔒 Upgrade to a paid plan to activate your dedicated AI phone number and start texting with real customers.
+            </p>
+          )}
+        </div>
+      )}
 
       {stylistId && (
         <div style={{ padding: 20, background: '#ecfdf5', borderRadius: 12, marginTop: 20, border: '1px solid #a7f3d0' }}>
