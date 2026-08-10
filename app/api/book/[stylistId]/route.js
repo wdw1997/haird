@@ -3,6 +3,8 @@ import { sendEmail } from '@/lib/resend-client'
 
 export const dynamic = 'force-dynamic'
 
+// Only these fields are safe to expose on a public, unauthenticated page.
+// Never return stylist.email, twilio_number, tokens, etc. here.
 function publicBusinessView(biz, stylistName) {
   return {
     business_name: biz?.business_name || stylistName || 'Book an appointment',
@@ -12,13 +14,15 @@ function publicBusinessView(biz, stylistName) {
   }
 }
 
+// Very light phone validation — just enough to reject obvious junk.
+// Real formatting/validation happens once it's a real conversation.
 function isPlausiblePhone(phone) {
   const digits = (phone || '').replace(/[^\d]/g, '')
   return digits.length >= 10 && digits.length <= 15
 }
 
 export async function GET(req, { params }) {
-  const { stylistId } = params
+  const { stylistId } = await params
   const supabaseAdmin = getSupabaseAdmin()
 
   const { data: stylist } = await supabaseAdmin
@@ -34,7 +38,7 @@ export async function GET(req, { params }) {
 }
 
 export async function POST(req, { params }) {
-  const { stylistId } = params
+  const { stylistId } = await params
   const supabaseAdmin = getSupabaseAdmin()
 
   let body
@@ -53,6 +57,9 @@ export async function POST(req, { params }) {
   if (!isPlausiblePhone(phone)) {
     return Response.json({ error: 'Please enter a valid phone number.' }, { status: 400 })
   }
+  // The opt-in checkbox/language is what makes this page valid for carrier
+  // toll-free verification — a submission without explicit consent doesn't
+  // get treated as consent to text this number.
   if (!agreed) {
     return Response.json({ error: 'Please confirm you agree to receive text messages.' }, { status: 400 })
   }
@@ -63,6 +70,8 @@ export async function POST(req, { params }) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
+  // Normalize to E.164-ish so this lines up with how numbers arrive via SMS
+  // (from Twilio/Telnyx) and can be matched against the same clients row later.
   const digits = phone.replace(/[^\d]/g, '')
   const normalizedPhone = digits.length === 10 ? `+1${digits}` : `+${digits}`
 
@@ -95,6 +104,7 @@ export async function POST(req, { params }) {
     return Response.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
 
+  // Best-effort notification — the request is already saved even if the email fails.
   if (stylist.email) {
     await sendEmail({
       to: stylist.email,
