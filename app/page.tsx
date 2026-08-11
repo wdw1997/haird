@@ -228,7 +228,7 @@ function HomeContent() {
         </h1>
         <p className="text-lg md:text-xl text-zinc-500 max-w-2xl mx-auto mb-10">
           Salon AI Assistant - Your Smart Voice & SMS Hairdresser Tool.
-          Record formulas with your voice and let AI automatically reply to your clients' booking texts.
+          Record formulas with your voice, let AI automatically reply to your clients' booking texts, and sync your appointments seamlessly with Google Calendar.
         </p>
         <Link href="/login" className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-300">
           Start for Free
