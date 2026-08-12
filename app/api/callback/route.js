@@ -1,19 +1,30 @@
 import { google } from 'googleapis'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { consumeOauthState } from '@/lib/oauth-state'
 
+// NOTE: this route duplicates app/api/google/callback/route.js and appears
+// to be leftover/unused (GOOGLE_REDIRECT_URI should point at
+// /api/google/callback). Keeping the same state-token fix here defensively
+// in case this URL is still registered in the Google OAuth client, but this
+// route should be deleted once you've confirmed nothing points at it.
 export async function GET(req) {
   const supabaseAdmin = getSupabaseAdmin()
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
-  const stylistId = searchParams.get('state')
+  const rawState = searchParams.get('state')
   const errorParam = searchParams.get('error')
   const redirectBase = process.env.NEXT_PUBLIC_APP_URL || 'https://www.veloceia.com'
 
   if (errorParam) {
     return Response.redirect(redirectBase + '/?calendar=cancelled')
   }
-  if (!stylistId || !code) {
+  if (!rawState || !code) {
     return new Response('Missing authorization parameters — please restart authorization from the settings page', { status: 400 })
+  }
+
+  const stylistId = await consumeOauthState(supabaseAdmin, rawState, 'google')
+  if (!stylistId) {
+    return new Response('Authorization expired or invalid — please restart authorization from the settings page', { status: 400 })
   }
 
   const stylistResult = await supabaseAdmin
