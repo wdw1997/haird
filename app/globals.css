@@ -5,11 +5,24 @@
   --foreground: #171717;
 }
 
+/* Salon palette — leather chairs, brass fixtures, porcelain counters,
+   colour-swatch binders. Deliberately not the cream+terracotta default. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+
+  --color-ink: #211b1c;
+  --color-porcelain: #fbf7f4;
+  --color-oxblood: #7a2e3a;
+  --color-oxblood-dark: #5e2129;
+  --color-sage: #6e8570;
+  --color-sage-dark: #556b58;
+  --color-brass: #b98d4f;
+  --color-line: #e4dad3;
+  --color-mute: #8a7b74;
 }
 
 @media (prefers-color-scheme: dark) {
