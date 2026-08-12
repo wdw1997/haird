@@ -37,10 +37,16 @@ export default function DemoChatPage() {
     setSending(true)
 
     try {
+      // demo-chat now requires a real session (it burns real quota, so it
+      // must be tied to an authenticated stylist, not a client-supplied id)
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/demo-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stylistId, sessionId, message: text }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ sessionId, message: text }),
       })
       const data = await res.json()
 
