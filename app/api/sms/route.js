@@ -8,6 +8,21 @@ import { generateAssistantReply } from '@/lib/ai-reply'
 export const dynamic = 'force-dynamic'
 const CHANNEL = 'sms'
 
+// The reply text (which can come straight from the AI model, i.e.
+// ultimately influenced by whatever the customer texted in) gets dropped
+// into a TwiML <Message> element as raw text below. Without escaping,
+// something as simple as a customer's message containing "&" or a stray
+// "<" could produce invalid XML and break the whole reply — or in the
+// worst case let text shaped like markup change what Twilio parses.
+function escapeXml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
 export async function POST(req) {
   const supabaseAdmin = getSupabaseAdmin()
   const formData = await req.formData()
@@ -51,7 +66,7 @@ export async function POST(req) {
     await supabaseAdmin.from('messages').insert({
       stylist_id: stylist.id, client_id: matchedClientId, phone_number: from, direction: 'outbound', body: text, channel: CHANNEL,
     })
-    return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${text}</Message></Response>`, {
+    return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(text)}</Message></Response>`, {
       headers: { 'Content-Type': 'text/xml' },
     })
   }
