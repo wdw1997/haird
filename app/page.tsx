@@ -70,15 +70,41 @@ function HomeContent() {
     }
   }
 
+  // Checkout links used to be plain <a href="/api/checkout?...&stylist=...">
+  // tags — that meant the endpoint had to accept an unauthenticated
+  // stylist id from the URL. Now the endpoint requires a session and always
+  // checks out for the logged-in stylist, so this has to be a fetch with
+  // the auth token instead of a bare link. openInNewTab mirrors the old
+  // target="_blank" behavior for the plan-upgrade buttons.
+  const goToCheckout = async (plan: 'pro' | 'team' | 'addon', openInNewTab = false) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        if (openInNewTab) window.open(data.url, '_blank', 'noopener,noreferrer')
+        else window.location.href = data.url
+      } else {
+        alert(data.error || 'Failed to start checkout')
+      }
+    } catch {
+      alert('Failed to start checkout — please try again later')
+    }
+  }
+
   if (session === undefined) {
     return <div className="flex h-screen items-center justify-center bg-white"><div className="animate-pulse text-gray-400">Loading...</div></div>
   }
 
   if (session) {
-    const proUrl = stylist ? `/api/checkout?plan=pro&stylist=${stylist.id}` : '#'
-    const teamUrl = stylist ? `/api/checkout?plan=team&stylist=${stylist.id}` : '#'
-    const addonUrl = stylist ? `/api/checkout?plan=addon&stylist=${stylist.id}` : '#'
-
     // 🔥 Effective limit = plan limit + top-up pack limit
     const effectiveSmsLimit = (stylist?.sms_limit || 3) + (stylist?.bonus_sms || 0)
     const effectiveVoiceLimit = (stylist?.voice_limit || 3) + (stylist?.bonus_voice || 0)
@@ -110,9 +136,9 @@ function HomeContent() {
               <div className="font-bold mb-1">⛔ Limit reached</div>
               <p className="mb-3">Your AI assistant has paused auto-replies. Buy a top-up pack or upgrade your plan to resume service.</p>
               <div className="flex gap-2">
-                <a href={addonUrl} className="flex-1 text-center bg-red-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-red-700 transition">
+                <button onClick={() => goToCheckout('addon')} className="flex-1 text-center bg-red-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-red-700 transition border-0 cursor-pointer">
                   $9.90 Buy Top-up Pack
-                </a>
+                </button>
                 <Link href="#upgrade" className="flex-1 text-center bg-white border border-red-300 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-50 transition">
                   Upgrade Plan
                 </Link>
@@ -154,9 +180,9 @@ function HomeContent() {
                 </div>
               </div>
             </div>
-            <a href={addonUrl} className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition">
+            <button onClick={() => goToCheckout('addon')} className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
               ⛽ $9.90 Buy 100 SMS / Voice Top-up Pack
-            </a>
+            </button>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -188,20 +214,20 @@ function HomeContent() {
             <h2 className="text-base font-bold text-gray-900 mb-1">Upgrade Plan</h2>
             <p className="text-xs text-gray-400 mb-4">Unlock more voice and SMS reply capacity</p>
             <div className="flex flex-col gap-3">
-              <a href={proUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl bg-gray-900 p-3.5 text-white transition hover:bg-gray-800">
+              <button onClick={() => goToCheckout('pro', true)} className="w-full flex items-center justify-between rounded-xl bg-gray-900 p-3.5 text-white transition hover:bg-gray-800 border-0 cursor-pointer">
                 <div>
                   <div className="font-medium text-sm">Upgrade to Solo Pro</div>
                   <div className="text-[11px] text-gray-400">300 voice uses + 200 SMS / month</div>
                 </div>
                 <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-md">$30/mo</span>
-              </a>
-              <a href={teamUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100">
+              </button>
+              <button onClick={() => goToCheckout('team', true)} className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-gray-900 transition hover:bg-gray-100 cursor-pointer">
                 <div>
                   <div className="font-medium text-sm">Upgrade to Team Salon</div>
                   <div className="text-[11px] text-gray-500">1000 voice uses + 600 SMS / month</div>
                 </div>
                 <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded-md">$60/mo</span>
-              </a>
+              </button>
             </div>
           </div>
 
