@@ -1,19 +1,29 @@
 import { google } from 'googleapis'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { consumeOauthState } from '@/lib/oauth-state'
 
 export async function GET(req) {
   const supabaseAdmin = getSupabaseAdmin()
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
-  const stylistId = searchParams.get('state')
+  const rawState = searchParams.get('state')
   const errorParam = searchParams.get('error')
   const redirectBase = process.env.NEXT_PUBLIC_APP_URL || 'https://www.veloceia.com'
 
   if (errorParam) {
     return Response.redirect(redirectBase + '/?calendar=cancelled')
   }
-  if (!stylistId || !code) {
+  if (!rawState || !code) {
     return new Response('授权参数缺失，请重新从设置页发起授权', { status: 400 })
+  }
+
+  // `state` must be redeemed through the one-time token we issued in
+  // /api/google/auth — it is NOT the stylist id. This is what actually
+  // proves the callback belongs to the logged-in user who started this
+  // flow, instead of trusting a value an attacker could set themselves.
+  const stylistId = await consumeOauthState(supabaseAdmin, rawState, 'google')
+  if (!stylistId) {
+    return new Response('授权已过期或无效，请重新从设置页发起授权', { status: 400 })
   }
 
   const stylistResult = await supabaseAdmin
