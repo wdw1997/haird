@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { createOauthState } from '@/lib/oauth-state'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,13 @@ export async function GET(req) {
     process.env.GOOGLE_REDIRECT_URI
   )
 
+  // IMPORTANT: `state` must be an unguessable, one-time token bound to this
+  // logged-in stylist — never the stylist id itself. The stylist id is not
+  // secret (it's visible in the public /book/[stylistId] URL), so using it
+  // directly as `state` let anyone hijack another business's Google Calendar
+  // connection by crafting their own authorize URL with someone else's id.
+  const state = await createOauthState(supabaseAdmin, stylist.id, 'google')
+
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     // Changed from read-only to read/write events + freebusy lookup, so the AI can auto-schedule appointments
@@ -38,7 +46,7 @@ export async function GET(req) {
       'https://www.googleapis.com/auth/calendar.freebusy',
     ],
     prompt: 'consent',
-    state: stylist.id,
+    state,
   })
 
   return Response.json({ url })
