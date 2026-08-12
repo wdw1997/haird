@@ -13,8 +13,25 @@ const TIMEZONES = [
   { value: 'Asia/Shanghai', label: 'China (Shanghai)' },
 ]
 
+const TABS = [
+  { id: 'details', label: 'Salon Details', dot: 'bg-oxblood' },
+  { id: 'connections', label: 'Connections', dot: 'bg-sage' },
+  { id: 'tools', label: 'Tools', dot: 'bg-brass' },
+]
+
+// Shared field styles — one calm vocabulary used everywhere so the page
+// reads as one surface instead of a stack of differently-styled widgets.
+const input = 'w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-mute/60 outline-none transition focus:border-oxblood focus:ring-2 focus:ring-oxblood/10'
+const label = 'block text-[13px] font-medium text-ink/85 mb-1.5'
+const helper = 'text-[12.5px] text-mute leading-relaxed'
+const sectionTitle = 'font-display text-[16px] font-semibold text-ink'
+const primaryBtn = 'inline-flex items-center justify-center gap-2 rounded-lg bg-oxblood px-5 py-2.5 text-[14px] font-semibold text-porcelain shadow-sm transition hover:bg-oxblood-dark active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none'
+const ghostBtn = 'inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-[13.5px] font-semibold text-ink transition hover:bg-porcelain'
+const card = 'rounded-xl border border-line bg-white p-5'
+
 function SettingsContent() {
   const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState('details')
   const [stylistId, setStylistId] = useState(null)
   const [instagramMsg, setInstagramMsg] = useState('')
   const [form, setForm] = useState({
@@ -29,6 +46,7 @@ function SettingsContent() {
   const [copyStatus, setCopyStatus] = useState('')
   const [planType, setPlanType] = useState('free')
   const [hasNumber, setHasNumber] = useState(true)
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false)
 
   const [calendarEvents, setCalendarEvents] = useState([])
   const [loadingCalendar, setLoadingCalendar] = useState(false)
@@ -43,11 +61,12 @@ function SettingsContent() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: stylist } = await supabase.from('stylists').select('id, plan_type, twilio_number').eq('auth_user_id', user.id).maybeSingle()
+      const { data: stylist } = await supabase.from('stylists').select('id, plan_type, twilio_number, google_cal_refresh_token_encrypted').eq('auth_user_id', user.id).maybeSingle()
       if (!stylist) return
       setStylistId(stylist.id)
       setPlanType(stylist.plan_type || 'free')
       setHasNumber(!!stylist.twilio_number)
+      setIsCalendarConnected(!!stylist.google_cal_refresh_token_encrypted)
 
       const { data: biz } = await supabase.from('business_settings').select('*').eq('stylist_id', stylist.id).maybeSingle()
       if (biz) {
@@ -89,6 +108,15 @@ function SettingsContent() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     const res = await fetch('/api/instagram/auth', { headers: { Authorization: `Bearer ${session.access_token}` } })
+    const data = await res.json()
+    if (data.url) window.location.href = data.url
+    else alert(data.error || 'Connection failed')
+  }
+
+  const handleConnectGoogle = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/google/auth', { headers: { Authorization: `Bearer ${session.access_token}` } })
     const data = await res.json()
     if (data.url) window.location.href = data.url
     else alert(data.error || 'Connection failed')
@@ -193,188 +221,254 @@ function SettingsContent() {
     return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
-  const input = { padding: 10, borderRadius: 6, border: '1px solid #ccc', width: '100%' }
-  const label = { fontWeight: 600, marginTop: 16, display: 'block' }
+  const bookingUrl = stylistId && typeof window !== 'undefined' ? `${window.location.origin}/book/${stylistId}` : ''
 
   return (
-    <div style={{ padding: 40, maxWidth: 600, margin: '0 auto' }}>
-      <Link href="/" style={{ fontSize: 14, color: '#666', textDecoration: 'none', marginBottom: 20, display: 'inline-block' }}>
-        &larr; Back to Home
-      </Link>
+    <div className="min-h-screen bg-porcelain">
+      <div className="mx-auto max-w-2xl px-5 py-10 md:py-14">
 
-      <h1>Business Settings</h1>
-
-      {stylistId && !hasNumber && (
-        <div style={{ padding: 20, background: '#eff6ff', borderRadius: 12, marginTop: 20, border: '1px solid #bfdbfe' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 6 }}>💬 Try Your AI Assistant</h2>
-          <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 12 }}>
-            {planType === 'free'
-              ? "You're on a free trial, so you don't have a dedicated phone number yet — but you can still test exactly how your AI assistant will respond to customers."
-              : "Your number is still being set up. In the meantime, you can test your AI assistant here."}
-          </p>
-          <Link href="/demo" style={{
-            display: 'inline-block', padding: '10px 20px', background: '#2563eb', color: 'white',
-            borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 14,
-          }}>
-            Open Demo Chat →
-          </Link>
-          {planType === 'free' && (
-            <p style={{ fontSize: 12, color: '#888', marginTop: 10, marginBottom: 0 }}>
-              🔒 Upgrade to a paid plan to activate your dedicated AI phone number and start texting with real customers.
-            </p>
-          )}
-        </div>
-      )}
-
-      {stylistId && (
-        <div style={{ padding: 20, background: '#ecfdf5', borderRadius: 12, marginTop: 20, border: '1px solid #a7f3d0' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 6 }}>🔗 Your Booking Page</h2>
-          <p style={{ fontSize: 13, color: '#666', marginTop: 0, marginBottom: 10 }}>
-            Share this link with customers (Instagram bio, texts, your Google listing) so they can request an appointment themselves.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              readOnly
-              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/book/${stylistId}`}
-              style={{ ...input, background: 'white', fontSize: 13, color: '#333' }}
-              onFocus={(e) => e.target.select()}
-            />
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/book/${stylistId}`)
-                setCopyStatus('Copied!')
-                setTimeout(() => setCopyStatus(''), 2000)
-              }}
-              style={{ padding: '0 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              Copy Link
-            </button>
+        {/* Header */}
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <Link href="/" className="text-[13px] text-mute hover:text-ink transition mb-3 inline-block">
+              &larr; Back to Home
+            </Link>
+            <h1 className="font-display text-[28px] font-semibold text-ink tracking-tight">Business Settings</h1>
           </div>
-          {copyStatus && <p style={{ marginTop: 8, fontSize: 13, color: '#16a34a' }}>{copyStatus}</p>}
+          <span className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${planType === 'free' ? 'bg-ink/5 text-mute' : 'bg-oxblood/10 text-oxblood'}`}>
+            {planType}
+          </span>
         </div>
-      )}
 
-      {pendingRequests.length > 0 && (
-        <div style={{ padding: 20, background: '#fff8e6', borderRadius: 12, marginTop: 20, border: '1px solid #ffe4a3' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>⏳ Pending Appointment Requests ({pendingRequests.length})</h2>
-          {pendingRequests.map(r => (
-            <div key={r.id} style={{ background: 'white', borderRadius: 8, padding: 12, marginBottom: 8, fontSize: 13 }}>
-              <div><strong>Phone:</strong> {r.phone_number}</div>
-              <div><strong>Service:</strong> {r.service_type || 'Not specified'}</div>
-              <div><strong>Time:</strong> {r.requested_start ? formatEventTime(r.requested_start) : 'Not set (calendar not connected)'}</div>
-              {r.notes && <div style={{ color: '#666', marginTop: 4 }}>{r.notes}</div>}
-              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                <button onClick={() => handleConfirmRequest(r.id, 'confirm')} style={{ flex: 1, padding: 8, background: '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Confirm</button>
-                <button onClick={() => handleConfirmRequest(r.id, 'decline')} style={{ flex: 1, padding: 8, background: '#f1f1f1', color: '#333', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Decline</button>
+        {/* Pending requests — always visible regardless of tab, this is time-sensitive */}
+        {pendingRequests.length > 0 && (
+          <div className="mb-6 rounded-xl border border-oxblood/25 bg-oxblood/5 p-5">
+            <h2 className="font-display text-[15px] font-semibold text-oxblood mb-3">
+              ⏳ Pending Appointment Requests ({pendingRequests.length})
+            </h2>
+            <div className="space-y-2">
+              {pendingRequests.map(r => (
+                <div key={r.id} className="rounded-lg bg-white border border-line p-3.5 text-[13px]">
+                  <div className="text-ink"><strong>Phone:</strong> {r.phone_number}</div>
+                  <div className="text-ink"><strong>Service:</strong> {r.service_type || 'Not specified'}</div>
+                  <div className="text-ink"><strong>Time:</strong> {r.requested_start ? formatEventTime(r.requested_start) : 'Not set (calendar not connected)'}</div>
+                  {r.notes && <div className="text-mute mt-1">{r.notes}</div>}
+                  <div className="mt-2.5 flex gap-2">
+                    <button onClick={() => handleConfirmRequest(r.id, 'confirm')} className="flex-1 rounded-md bg-sage py-1.5 text-[12.5px] font-semibold text-white hover:bg-sage-dark transition">Confirm</button>
+                    <button onClick={() => handleConfirmRequest(r.id, 'decline')} className="flex-1 rounded-md border border-line bg-white py-1.5 text-[12.5px] font-semibold text-ink hover:bg-porcelain transition">Decline</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Swatch tabs — styled like a colour-swatch binder, echoing the salon's own materials */}
+        <div className="rounded-t-2xl bg-ink px-2 pt-2">
+          <div className="flex items-end gap-1">
+            {TABS.map(tab => {
+              const active = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex items-center gap-2 rounded-t-xl px-4 py-3 text-[13.5px] transition
+                    ${active ? 'bg-porcelain text-ink -mb-px z-10' : 'text-porcelain/60 hover:text-porcelain hover:bg-white/5'}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${tab.dot}`} />
+                  <span className="font-display font-semibold">{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Content card — reads as a continuation of the active tab */}
+        <div className="rounded-b-2xl rounded-tr-2xl border border-line bg-porcelain p-5 md:p-7">
+
+          {activeTab === 'details' && (
+            <div className="space-y-7">
+              <div>
+                <h3 className={sectionTitle}>About your salon</h3>
+                <p className={`${helper} mb-4`}>What the AI tells customers when they ask where you are or when you're open.</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className={label}>Business name</label>
+                    <input className={input} value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={label}>Address</label>
+                    <input className={input} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={label}>Contact phone <span className="text-mute font-normal">(for handoff to a human)</span></label>
+                    <input className={input} value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={label}>Business hours</label>
+                    <input className={input} placeholder='e.g. "Mon-Fri 9-6, Sat 10-4"' value={form.business_hours_text} onChange={e => setForm({ ...form, business_hours_text: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={label}>Timezone <span className="text-mute font-normal">(affects AI scheduling accuracy)</span></label>
+                    <select className={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
+                      {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-line pt-6">
+                <h3 className={sectionTitle}>Services &amp; pricing</h3>
+                <p className={`${helper} mb-3`}>One per line: Name, Price, Duration in minutes.</p>
+                <textarea className={`${input} h-28 font-mono text-[13.5px]`} placeholder={"Haircut,30,30\nHighlights,80,120"} value={form.services_text} onChange={e => setForm({ ...form, services_text: e.target.value })} />
+              </div>
+
+              <div className="border-t border-line pt-6 space-y-4">
+                <h3 className={sectionTitle}>Booking rules</h3>
+                <div>
+                  <label className={label}>Booking mode</label>
+                  <select className={input} value={form.booking_mode} onChange={e => setForm({ ...form, booking_mode: e.target.value })}>
+                    <option value="ai_collect_manual_confirm">AI collects request, owner confirms manually</option>
+                    <option value="ai_auto_confirm">AI confirms bookings automatically</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={label}>Minimum advance booking (hours)</label>
+                  <input type="number" className={input} value={form.min_advance_hours} onChange={e => setForm({ ...form, min_advance_hours: e.target.value })} />
+                </div>
+                <div>
+                  <label className={label}>Cancellation policy</label>
+                  <textarea className={`${input} h-20`} placeholder="e.g. 50% fee for cancellations within 24 hours" value={form.cancellation_policy} onChange={e => setForm({ ...form, cancellation_policy: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="border-t border-line pt-6 space-y-4">
+                <h3 className={sectionTitle}>Voice &amp; style</h3>
+                <div>
+                  <label className={label}>Reply tone</label>
+                  <select className={input} value={form.tone} onChange={e => setForm({ ...form, tone: e.target.value })}>
+                    <option value="professional">Professional &amp; concise</option>
+                    <option value="friendly">Warm &amp; friendly</option>
+                    <option value="humorous">Playful &amp; humorous</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-2.5 text-[14px] text-ink cursor-pointer">
+                  <input type="checkbox" checked={form.use_emoji} onChange={e => setForm({ ...form, use_emoji: e.target.checked })} className="h-4 w-4 rounded border-line accent-oxblood" />
+                  Allow emojis in replies
+                </label>
+              </div>
+
+              <div className="border-t border-line pt-6">
+                <button onClick={handleSave} className={`${primaryBtn} w-full`}>Save Settings</button>
+                {status && <p className={`${helper} mt-2.5 text-center`}>{status}</p>}
               </div>
             </div>
-          ))}
+          )}
+
+          {activeTab === 'connections' && (
+            <div className="space-y-4">
+              <div className={card}>
+                <h3 className={`${sectionTitle} mb-1`}>🔗 Your booking page</h3>
+                <p className={`${helper} mb-3.5`}>Share this with customers (Instagram bio, texts, your Google listing) so they can request an appointment themselves.</p>
+                <div className="flex gap-2">
+                  <input readOnly value={bookingUrl} onFocus={e => e.target.select()} className={`${input} text-[13px] text-mute`} />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(bookingUrl); setCopyStatus('Copied!'); setTimeout(() => setCopyStatus(''), 2000) }}
+                    className={`${ghostBtn} shrink-0`}
+                  >
+                    {copyStatus || 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className={card}>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className={sectionTitle}>📅 Google Calendar</h3>
+                  {isCalendarConnected && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-sage/10 px-2.5 py-1 text-[11.5px] font-semibold text-sage-dark">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sage" /> Connected
+                    </span>
+                  )}
+                </div>
+                <p className={`${helper} mb-3.5`}>Lets the AI check your real availability and add confirmed bookings automatically.</p>
+                {isCalendarConnected ? (
+                  <div>
+                    <button onClick={fetchCalendar} disabled={loadingCalendar} className={ghostBtn}>
+                      {loadingCalendar ? 'Loading...' : 'Test sync — load next 7 days'}
+                    </button>
+                    {calendarError && <p className="mt-2.5 text-[12.5px] text-oxblood">⚠️ {calendarError}</p>}
+                    {calendarEvents.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {calendarEvents.map(ev => (
+                          <li key={ev.id} className="rounded-lg border border-line bg-porcelain px-3 py-2 text-[12.5px]">
+                            <div className="font-medium text-ink">{ev.title}</div>
+                            <div className="text-mute">{formatEventTime(ev.start)} — {formatEventTime(ev.end)}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <button onClick={handleConnectGoogle} className={primaryBtn}>Connect Google Calendar</button>
+                )}
+              </div>
+
+              <div className={card}>
+                <h3 className={`${sectionTitle} mb-1`}>📷 Instagram DM</h3>
+                <p className={`${helper} mb-3.5`}>Let the AI assistant reply to Instagram DMs the same way it replies to texts.</p>
+                {instagramMsg && <p className="mb-3 text-[13px] text-ink">{instagramMsg}</p>}
+                <button onClick={handleConnectInstagram} className={primaryBtn}>Connect Instagram</button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'tools' && (
+            <div className="space-y-4">
+              {!hasNumber && (
+                <div className={card}>
+                  <h3 className={`${sectionTitle} mb-1`}>💬 Try your AI assistant</h3>
+                  <p className={`${helper} mb-3.5`}>
+                    {planType === 'free'
+                      ? "You're on a free trial, so you don't have a dedicated phone number yet — but you can still test exactly how your AI assistant will respond to customers."
+                      : "Your number is still being set up. In the meantime, you can test your AI assistant here."}
+                  </p>
+                  <Link href="/demo" className={primaryBtn}>Open Demo Chat →</Link>
+                  {planType === 'free' && (
+                    <p className={`${helper} mt-3`}>🔒 Upgrade to a paid plan to activate your dedicated AI phone number and start texting with real customers.</p>
+                  )}
+                </div>
+              )}
+
+              <div className={card}>
+                <h3 className={`${sectionTitle} mb-1`}>📞 Manually add appointment</h3>
+                <p className={`${helper} mb-3.5`}>For existing clients who call or book in person.</p>
+                <div className="space-y-3">
+                  <input className={input} placeholder="Client name" value={apptForm.clientName} onChange={e => setApptForm({ ...apptForm, clientName: e.target.value })} />
+                  <div className="flex gap-2">
+                    <input className={input} type="date" value={apptForm.date} onChange={e => setApptForm({ ...apptForm, date: e.target.value })} />
+                    <input className={input} type="time" value={apptForm.time} onChange={e => setApptForm({ ...apptForm, time: e.target.value })} />
+                  </div>
+                  <div className="flex gap-2">
+                    <input className={input} placeholder="Service" value={apptForm.service} onChange={e => setApptForm({ ...apptForm, service: e.target.value })} />
+                    <input className={`${input} w-28 shrink-0`} type="number" placeholder="Min" value={apptForm.duration} onChange={e => setApptForm({ ...apptForm, duration: e.target.value })} />
+                  </div>
+                  <textarea className={`${input} h-16`} placeholder="Notes (optional)" value={apptForm.notes} onChange={e => setApptForm({ ...apptForm, notes: e.target.value })} />
+                  <button onClick={handleAddAppointment} className={`${primaryBtn} w-full`}>Add to Calendar</button>
+                  {apptStatus && <p className={`${helper} text-center`}>{apptStatus}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
-      )}
-
-      <div style={{ padding: 20, background: '#f0f7ff', borderRadius: 12, marginTop: 20, border: '1px solid #cfe4ff' }}>
-        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📞 Manually Add Appointment</h2>
-        <p style={{ fontSize: 13, color: '#666', marginTop: 0 }}>For existing clients who call or book in person</p>
-        <input style={{ ...input, marginBottom: 8 }} placeholder="Client name" value={apptForm.clientName} onChange={e => setApptForm({ ...apptForm, clientName: e.target.value })} />
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <input style={input} type="date" value={apptForm.date} onChange={e => setApptForm({ ...apptForm, date: e.target.value })} />
-          <input style={input} type="time" value={apptForm.time} onChange={e => setApptForm({ ...apptForm, time: e.target.value })} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <input style={input} placeholder="Service" value={apptForm.service} onChange={e => setApptForm({ ...apptForm, service: e.target.value })} />
-          <input style={{ ...input, width: 120 }} type="number" placeholder="Duration (min)" value={apptForm.duration} onChange={e => setApptForm({ ...apptForm, duration: e.target.value })} />
-        </div>
-        <textarea style={{ ...input, height: 50, marginBottom: 8 }} placeholder="Notes (optional)" value={apptForm.notes} onChange={e => setApptForm({ ...apptForm, notes: e.target.value })} />
-        <button onClick={handleAddAppointment} style={{ width: '100%', padding: 10, background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Add to Calendar</button>
-        {apptStatus && <p style={{ marginTop: 8, fontSize: 13, color: '#666' }}>{apptStatus}</p>}
       </div>
-
-      <div style={{ padding: 20, background: '#f8f9fa', borderRadius: 12, marginTop: 20, marginBottom: 10, border: '1px solid #e9ecef' }}>
-        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📅 Google Calendar Sync Test</h2>
-        <button
-          onClick={fetchCalendar}
-          disabled={loadingCalendar}
-          style={{ padding: '10px 16px', background: loadingCalendar ? '#999' : '#4285F4', color: 'white', border: 'none', borderRadius: 6, cursor: loadingCalendar ? 'not-allowed' : 'pointer', fontSize: 14 }}
-        >
-          {loadingCalendar ? 'Loading...' : 'Load Next 7 Days'}
-        </button>
-        {calendarError && <p style={{ marginTop: 12, color: '#d93025', fontSize: 13 }}>⚠️ {calendarError}</p>}
-        {calendarEvents.length > 0 && (
-          <ul style={{ marginTop: 12, paddingLeft: 0, listStyle: 'none' }}>
-            {calendarEvents.map((event) => (
-              <li key={event.id} style={{ padding: '8px 12px', background: 'white', borderRadius: 8, marginBottom: 6, border: '1px solid #eee', fontSize: 13 }}>
-                <div style={{ fontWeight: 600 }}>{event.title}</div>
-                <div style={{ color: '#666', marginTop: 2 }}>{formatEventTime(event.start)} — {formatEventTime(event.end)}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div style={{ padding: 20, background: '#fdf2f8', borderRadius: 12, marginTop: 10, marginBottom: 20, border: '1px solid #fbcfe8' }}>
-        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>📷 Instagram DM</h2>
-        <p style={{ fontSize: 13, color: '#666', marginTop: 0 }}>Let the AI assistant reply to Instagram DMs the same way it replies to texts.</p>
-        {instagramMsg && <p style={{ fontSize: 13, marginBottom: 10 }}>{instagramMsg}</p>}
-        <button onClick={handleConnectInstagram} style={{ width: '100%', padding: 10, background: '#db2777', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-          Connect Instagram
-        </button>
-      </div>
-
-      <label style={label}>🌍 Business Timezone (affects AI scheduling accuracy)</label>
-      <select style={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
-        {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
-      </select>
-
-      <label style={label}>Business Name</label>
-      <input style={input} value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
-
-      <label style={label}>Address</label>
-      <input style={input} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-
-      <label style={label}>Contact Phone (for handoff to a human)</label>
-      <input style={input} value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })} />
-
-      <label style={label}>Business Hours (free text, e.g. "Mon-Fri 9-6, Sat 10-4")</label>
-      <input style={input} value={form.business_hours_text} onChange={e => setForm({ ...form, business_hours_text: e.target.value })} />
-
-      <label style={label}>Services (one per line: Name,Price,DurationMinutes)</label>
-      <textarea style={{ ...input, height: 100 }} placeholder={"Haircut,30,30\nHighlights,80,120"} value={form.services_text} onChange={e => setForm({ ...form, services_text: e.target.value })} />
-
-      <label style={label}>Booking Mode</label>
-      <select style={input} value={form.booking_mode} onChange={e => setForm({ ...form, booking_mode: e.target.value })}>
-        <option value="ai_collect_manual_confirm">AI collects request, owner confirms manually</option>
-        <option value="ai_auto_confirm">AI confirms bookings automatically</option>
-      </select>
-
-      <label style={label}>Minimum Advance Booking (hours)</label>
-      <input type="number" style={input} value={form.min_advance_hours} onChange={e => setForm({ ...form, min_advance_hours: e.target.value })} />
-
-      <label style={label}>Cancellation Policy</label>
-      <textarea style={{ ...input, height: 60 }} placeholder="e.g. 50% fee for cancellations within 24 hours" value={form.cancellation_policy} onChange={e => setForm({ ...form, cancellation_policy: e.target.value })} />
-
-      <label style={label}>Reply Tone</label>
-      <select style={input} value={form.tone} onChange={e => setForm({ ...form, tone: e.target.value })}>
-        <option value="professional">Professional & concise</option>
-        <option value="friendly">Warm & friendly</option>
-        <option value="humorous">Playful & humorous</option>
-      </select>
-
-      <label style={{ ...label, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input type="checkbox" checked={form.use_emoji} onChange={e => setForm({ ...form, use_emoji: e.target.checked })} />
-        Allow emojis in replies
-      </label>
-
-      <button onClick={handleSave} style={{ marginTop: 24, padding: 12, background: '#333', color: 'white', border: 'none', borderRadius: 6, width: '100%' }}>
-        Save Settings
-      </button>
-      {status && <p style={{ marginTop: 12, color: '#666' }}>{status}</p>}
     </div>
   )
 }
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading...</div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-porcelain text-mute">Loading...</div>}>
       <SettingsContent />
     </Suspense>
   )
