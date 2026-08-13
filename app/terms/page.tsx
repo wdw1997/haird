@@ -7,6 +7,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         <div className="prose prose-zinc text-zinc-600 space-y-6">
           <p>Last updated: August 3, 2026</p>
+          <p>Welcome to Veloceia. This website and the Veloceia services are operated and legally owned by Dong Wei Wang (a Sole Proprietor).</p>
           <h2 className="text-xl font-semibold text-black mt-8">1. Acceptance of Terms</h2>
           <p>By accessing and using Veloceia (the "Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.</p>
 
@@ -21,7 +22,7 @@ export default function TermsPage() {
 
           <h2 className="text-xl font-semibold text-black mt-8">5. Company Information</h2>
           <p>
-            Veloceia Global<br />
+            Veloceia<br />
             No. 55 Xujiahuan, Jinniu Sector, Wuzhen,<br />
             Tongxiang, Zhejiang, China, 314501
           </p>
