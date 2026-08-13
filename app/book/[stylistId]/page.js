@@ -147,9 +147,18 @@ export default function PublicBookingPage() {
             required
           />
           <span>
-            By submitting this form, you agree to receive SMS text messages from{' '}
-            {biz?.business_name || 'this business'} regarding your inquiry/appointments.
-            Message and data rates may apply. Reply STOP to opt out.
+            By checking this box, I agree to receive text messages from{' '}
+            {biz?.business_name || 'Veloceia'} regarding my appointments and support.
+            Message frequency varies. Message and data rates may apply. Reply STOP to opt
+            out, HELP for help. View our{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">
+              Privacy Policy
+            </a>{' '}
+            and{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer">
+              Terms of Service
+            </a>
+            .
           </span>
         </label>
 
