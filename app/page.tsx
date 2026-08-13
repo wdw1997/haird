@@ -471,7 +471,7 @@ function HomeContent() {
       <footer className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-6">
           <div className="text-zinc-400 text-sm">
-            © {new Date().getFullYear()} Veloceia. All rights reserved.
+            © {new Date().getFullYear()} Veloceia. All rights reserved. (Operated by Dong Wei Wang)
           </div>
           <div className="flex gap-6 text-sm font-medium text-zinc-500">
             <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
@@ -480,7 +480,7 @@ function HomeContent() {
           </div>
         </div>
         <div className="text-xs text-zinc-400 leading-relaxed border-t border-zinc-100 pt-6">
-          Veloceia Global<br />
+          Veloceia<br />
           No. 55 Xujiahuan, Jinniu Sector, Wuzhen,<br />
           Tongxiang, Zhejiang, China, 314501
         </div>
