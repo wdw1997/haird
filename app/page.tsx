@@ -249,6 +249,9 @@ function HomeContent() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 pt-20 pb-20 text-center">
+        <div className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-4">
+          Your AI Front Desk
+        </div>
         <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-tight mb-6">
           Focus on the hair.<br className="hidden md:block"/> Let AI handle the rest.
         </h1>
@@ -259,28 +262,158 @@ function HomeContent() {
         <Link href="/login" className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-300">
           Start for Free
         </Link>
-
-        <div className="mt-20 max-w-4xl mx-auto rounded-xl overflow-hidden shadow-2xl border border-zinc-200 bg-zinc-900">
-          <div className="w-full h-8 bg-zinc-900 flex items-center px-4 gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-          </div>
-          <div className="relative w-full bg-black">
-            <video
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-              controls
-              src="/demo.mp4"
-            >
-              Your browser does not support the video tag.
-            </video>
-          </div>
-        </div>
       </main>
+      {/* Feature grid — each card pairs a real capability with a small preview
+          of what it actually looks like in the product, instead of a stock
+          screenshot or an abstract icon. */}
+      <section className="max-w-6xl mx-auto px-6 pb-24">
+        <div className="grid md:grid-cols-3 gap-6">
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">Never Lose a Formula Again</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              Say it out loud after every appointment. Veloceia transcribes it and files it under the client automatically — no more scribbled notes on the counter.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-semibold text-zinc-700">Recent formulas</span>
+                <span className="text-xs text-zinc-400">today</span>
+              </div>
+              <div className="space-y-2.5">
+                {[
+                  ['Sarah M.', 'Balayage + 20vol toner', '2m ago'],
+                  ['James K.', 'Full color, level 6', '1h ago'],
+                  ['Priya D.', 'Root touch-up + gloss', '3h ago'],
+                ].map(([name, formula, time]) => (
+                  <div key={name} className="flex justify-between items-center bg-white rounded-lg px-3 py-2 border border-zinc-100">
+                    <div>
+                      <div className="text-xs font-semibold text-zinc-800">{name}</div>
+                      <div className="text-[11px] text-zinc-400">{formula}</div>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 shrink-0 ml-2">{time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">AI Replies While You Cut</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              Booking questions land as a text or Instagram DM. Your AI assistant checks your rules and answers in seconds, in your voice.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-semibold text-zinc-700">Reply sent</span>
+                <span className="text-xs text-zinc-400">just now</span>
+              </div>
+              <div className="space-y-2 text-xs text-zinc-600">
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Read the question</div>
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Checked your booking rules</div>
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Matched your tone of voice</div>
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Sent as SMS</div>
+              </div>
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-zinc-200 text-xs">
+                <span className="text-zinc-400">Answered in</span>
+                <span className="font-bold text-zinc-800">8 seconds</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">Every Conversation, One Inbox</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              SMS and Instagram DMs land in the same place as formulas and booking history — nothing lives in three different apps.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4">
+              <div className="text-xs font-semibold text-zinc-700 mb-3">Sarah M.</div>
+              <div className="space-y-2">
+                {['Last message', 'Formula history', 'Next appointment'].map((row) => (
+                  <div key={row} className="flex justify-between items-center bg-white rounded-lg px-3 py-2 border border-zinc-100">
+                    <span className="text-xs text-zinc-600">{row}</span>
+                    <span className="text-xs font-medium text-indigo-600">View</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">Books Straight to Your Calendar</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              Connect Google Calendar once. Every AI-booked appointment shows up instantly, and it always double-checks you're free first.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">G</div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-800">Google Calendar</div>
+                  <div className="text-[11px] text-zinc-400">Synced automatically</div>
+                </div>
+              </div>
+              <div className="space-y-2 text-xs text-zinc-600">
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Checked availability</div>
+                <div className="flex items-center gap-2"><span className="text-indigo-600">✓</span> Event created</div>
+                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full border-2 border-zinc-300 inline-block"></span> Reminder scheduled</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">See Your Usage at a Glance</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              Track voice formulas and AI replies against your plan in real time, right from your dashboard — no surprises at the end of the month.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4 space-y-4">
+              <div>
+                <div className="flex justify-between text-[11px] text-zinc-500 mb-1">
+                  <span>Voice Formula Recognition</span><span>142/300</span>
+                </div>
+                <div className="h-1.5 w-full bg-zinc-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-zinc-900 rounded-full" style={{ width: '47%' }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] text-zinc-500 mb-1">
+                  <span>SMS Auto-Reply</span><span>88/200</span>
+                </div>
+                <div className="h-1.5 w-full bg-zinc-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-600 rounded-full" style={{ width: '44%' }} />
+                </div>
+              </div>
+              <div className="text-[11px] text-zinc-400 pt-1">Resets on the 1st</div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 p-8">
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">Works Where Your Clients Already Text</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
+              A dedicated SMS number and a connected Instagram account, both covered from day one. Turn on whichever your clients use most.
+            </p>
+            <div className="rounded-xl bg-zinc-50 p-4 space-y-2">
+              <div className="flex justify-between items-center bg-white rounded-lg px-3 py-2.5 border border-zinc-100">
+                <span className="text-xs text-zinc-700">💬 SMS</span>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                </span>
+              </div>
+              <div className="flex justify-between items-center bg-white rounded-lg px-3 py-2.5 border border-zinc-100">
+                <span className="text-xs text-zinc-700">📷 Instagram DMs</span>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Connected
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div className="text-center mt-12">
+          <Link href="/login" className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-300">
+            Try it yourself — it's free →
+          </Link>
+        </div>
+      </section>
 
       <section className="bg-zinc-50 py-24 px-6 border-y border-zinc-100">
         <div className="max-w-5xl mx-auto">
