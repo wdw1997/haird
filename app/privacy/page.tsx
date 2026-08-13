@@ -14,6 +14,7 @@ export default function PrivacyPage() {
 
           <h2 className="text-xl font-semibold text-black mt-8">2. How We Use Your Information</h2>
           <p>We use the information we collect to provide, maintain, and improve our services, including processing voice-to-text and generating AI SMS replies. We do not sell your personal data or your clients' data to third parties.</p>
+          <p>No mobile information will be shared with third parties/affiliates for marketing/promotional purposes. All other categories exclude text messaging originator opt-in data and consent; this information will not be shared with any third parties.</p>
 
           <h2 className="text-xl font-semibold text-black mt-8">3. Data Security</h2>
           <p>We implement appropriate technical and organizational measures to protect the security of your personal information.</p>
