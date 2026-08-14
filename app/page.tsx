@@ -471,7 +471,7 @@ function HomeContent() {
       <footer className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-6">
           <div className="text-zinc-400 text-sm">
-            © {new Date().getFullYear()} Veloceia. All rights reserved. (Operated by Dong Wei Wang)
+            © {new Date().getFullYear()} Veloceia. All rights reserved. &quot;Veloceia&quot; is a trade name (DBA) used by Dong Wei Wang, a sole proprietor.
           </div>
           <div className="flex gap-6 text-sm font-medium text-zinc-500">
             <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
