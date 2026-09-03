@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { provisionPhoneNumber } from '@/lib/provision-number'
+import { allocateNumberFromPool, releaseNumberToPool } from '@/lib/provision-number'
 import { sendEmail } from '@/lib/resend-client'
 
 export const dynamic = 'force-dynamic'
@@ -109,26 +109,27 @@ export async function POST(req) {
           voice_100_notified: false,
         }).eq('id', stylistId)
 
-        // Trial users never get a real number (see lib/provision-number.js) —
-        // this is the one moment a number actually gets bought and billed.
-        // Only do this once: a stylist who already has a number (e.g.
-        // re-subscribing after a downgrade) keeps the one they had.
+        // Trial users never get a real number — this is the one moment a
+        // number actually gets handed out from the pre-verified pool. Only
+        // do this once: a stylist who already has a number (e.g.
+        // re-subscribing after a downgrade, before it was ever released)
+        // keeps the one they had.
         const { data: freshStylist } = await supabaseAdmin
           .from('stylists').select('twilio_number, name, email').eq('id', stylistId).maybeSingle()
 
         if (freshStylist && !freshStylist.twilio_number) {
-          const purchasedNumber = await provisionPhoneNumber({})
-          if (purchasedNumber) {
-            await supabaseAdmin.from('stylists').update({ twilio_number: purchasedNumber }).eq('id', stylistId)
+          const claimedNumber = await allocateNumberFromPool(stylistId)
+          if (claimedNumber) {
+            await supabaseAdmin.from('stylists').update({ twilio_number: claimedNumber, needs_number_provisioning: false }).eq('id', stylistId)
           } else {
-            // Don't block the paid activation on this — flag it and alert an
-            // admin to provision the number manually instead.
+            // Pool is empty — don't block the paid activation on this, flag
+            // it and alert an admin to buy more numbers into the pool.
             await supabaseAdmin.from('stylists').update({ needs_number_provisioning: true }).eq('id', stylistId)
             if (process.env.ADMIN_ALERT_EMAIL) {
               await sendEmail({
                 to: process.env.ADMIN_ALERT_EMAIL,
-                subject: `⚠️ Number provisioning failed for stylist ${stylistId}`,
-                html: `<p>Automatic number purchase failed for ${freshStylist.name || stylistId} (${freshStylist.email || 'no email'}) after a successful checkout. Please provision a number manually in Twilio and set it in Supabase (stylists.twilio_number).</p>`,
+                subject: `⚠️ Phone number pool is empty — ${freshStylist.name || stylistId} is waiting`,
+                html: `<p>${freshStylist.name || stylistId} (${freshStylist.email || 'no email'}) just paid but the phone number pool has no available numbers left. Buy more numbers into the pool from the admin dashboard, then assign one manually in Supabase (stylists.twilio_number) for this stylist.</p>`,
               })
             }
           }
@@ -174,6 +175,14 @@ export async function POST(req) {
           break
         }
 
+        // Release the number back to the pool BEFORE clearing it from the
+        // stylist row, otherwise we'd lose track of which number to free up.
+        const { data: cancelingStylist } = await supabaseAdmin
+          .from('stylists').select('twilio_number').eq('id', stylistId).maybeSingle()
+        if (cancelingStylist?.twilio_number) {
+          await releaseNumberToPool(cancelingStylist.twilio_number)
+        }
+
         const limits = PLAN_LIMITS.free
         await supabaseAdmin.from('stylists').update({
           plan_type: 'free',
@@ -185,6 +194,8 @@ export async function POST(req) {
           sms_100_notified: false,
           voice_80_notified: false,
           voice_100_notified: false,
+          twilio_number: null,
+          needs_number_provisioning: false,
         }).eq('id', stylistId)
         break
       }
