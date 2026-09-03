@@ -7,6 +7,15 @@ export default function AdminPage() {
   const [status, setStatus] = useState('loading') // loading | denied | ready
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
+  const [pool, setPool] = useState(null)
+  const [buying, setBuying] = useState(false)
+  const [buyStatus, setBuyStatus] = useState('')
+
+  const loadPool = async (session) => {
+    const res = await fetch('/api/admin/phone-pool', { headers: { Authorization: `Bearer ${session.access_token}` } })
+    const data = await res.json()
+    if (res.ok) setPool(data)
+  }
 
   useEffect(() => {
     (async () => {
@@ -18,11 +27,29 @@ export default function AdminPage() {
         if (!res.ok || data.error) { setStatus('denied'); setError(data.error || 'Failed to load'); return }
         setStats(data)
         setStatus('ready')
+        loadPool(session)
       } catch (err) {
         setStatus('denied'); setError('Network error')
       }
     })()
   }, [])
+
+  const handleBuyNumbers = async (count) => {
+    setBuying(true)
+    setBuyStatus(`Buying ${count} number${count > 1 ? 's' : ''}...`)
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/admin/phone-pool', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count, tollFree: true }),
+    })
+    const data = await res.json()
+    setBuyStatus(res.ok
+      ? `✅ Bought ${data.bought.length}${data.failedCount ? `, ${data.failedCount} failed` : ''}`
+      : `❌ ${data.error || 'Failed'}`)
+    await loadPool(session)
+    setBuying(false)
+  }
 
   const card = { background: 'white', borderRadius: 12, padding: 16, border: '1px solid #eee' }
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -84,6 +111,45 @@ export default function AdminPage() {
               <strong>{s.name || s.email || s.id}</strong> — {s.plan_type} — SMS {s.sms_used}/{s.sms_limit}, Voice {s.voice_used}/{s.voice_limit}
             </div>
           ))}
+        </div>
+      )}
+
+      {pool && (
+        <div style={{ ...card, marginBottom: 24, ...(pool.available === 0 ? { background: '#fff5f5', borderColor: '#ffd6d6' } : {}) }}>
+          <h2 style={{ fontSize: 16, marginTop: 0, marginBottom: 4 }}>📞 Phone Number Pool</h2>
+          <p style={{ fontSize: 12, color: '#888', marginTop: 0, marginBottom: 12 }}>
+            Numbers bought and verified ahead of time — handed to a stylist the instant they pay, no waiting on Twilio verification.
+          </p>
+          <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: pool.available === 0 ? '#d93025' : '#111' }}>{pool.available}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>Available</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{pool.assigned}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>Assigned</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{pool.total}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>Total owned</div>
+            </div>
+          </div>
+
+          {pool.waitingStylists?.length > 0 && (
+            <div style={{ fontSize: 12.5, background: '#fff8e6', border: '1px solid #ffe4a3', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              ⚠️ {pool.waitingStylists.length} paying salon(s) waiting on a number: {pool.waitingStylists.map(s => s.name || s.email).join(', ')}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => handleBuyNumbers(1)} disabled={buying} style={{ padding: '8px 14px', fontSize: 13, borderRadius: 6, border: '1px solid #ddd', background: 'white', cursor: buying ? 'not-allowed' : 'pointer' }}>
+              Buy 1 toll-free number
+            </button>
+            <button onClick={() => handleBuyNumbers(5)} disabled={buying} style={{ padding: '8px 14px', fontSize: 13, borderRadius: 6, border: 'none', background: '#111', color: 'white', cursor: buying ? 'not-allowed' : 'pointer' }}>
+              Buy 5 more
+            </button>
+            {buyStatus && <span style={{ fontSize: 12.5, color: '#666' }}>{buyStatus}</span>}
+          </div>
         </div>
       )}
 
