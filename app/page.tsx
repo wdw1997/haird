@@ -100,10 +100,13 @@ function HomeContent() {
     }
   }
 
-  if (session === undefined) {
-    return <div className="flex h-screen items-center justify-center bg-white"><div className="animate-pulse text-gray-400">Loading...</div></div>
-  }
-
+  // Note: we used to show a bare "Loading..." screen here while the Supabase
+  // session check was in flight. That meant anything that reads the page
+  // without running our client JS to completion (crawlers, link previews,
+  // Google's OAuth branding verification) saw a blank loading state instead
+  // of content describing what Veloceia does. Now we render the public
+  // marketing page immediately by default, and only switch to the dashboard
+  // once we've confirmed there's a logged-in session.
   if (session) {
     // 🔥 Effective limit = plan limit + top-up pack limit
     const effectiveSmsLimit = (stylist?.sms_limit || 3) + (stylist?.bonus_sms || 0)
@@ -120,7 +123,7 @@ function HomeContent() {
       <div className="min-h-screen bg-gray-50 px-6 py-10">
         <div className="mx-auto max-w-md">
           <header className="mb-8 text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Salon AI</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Veloceia</h1>
             <p className="text-sm text-gray-500 mt-2">Smart Hairdresser Formula & SMS Assistant</p>
           </header>
 
@@ -256,7 +259,7 @@ function HomeContent() {
           Focus on the hair.<br className="hidden md:block"/> Let AI handle the rest.
         </h1>
         <p className="text-lg md:text-xl text-zinc-500 max-w-2xl mx-auto mb-10">
-          Salon AI Assistant - Your Smart Voice & SMS Hairdresser Tool.
+          Veloceia is your smart voice & SMS assistant for salons.
           Record formulas with your voice, let AI automatically reply to your clients' booking texts, and sync your appointments seamlessly with Google Calendar.
         </p>
         <Link href="/login" className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-300">
@@ -471,7 +474,7 @@ function HomeContent() {
       <footer className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-6">
           <div className="text-zinc-400 text-sm">
-            © {new Date().getFullYear()} Veloceia. All rights reserved. &quot;Veloceia&quot; is operated by Xinwei (Tongxiang) E-Commerce Co., Ltd.
+            © {new Date().getFullYear()} Veloceia. All rights reserved. &quot;Veloceia&quot; is a trade name (DBA) used by Dong Wei Wang, a sole proprietor.
           </div>
           <div className="flex gap-6 text-sm font-medium text-zinc-500">
             <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
