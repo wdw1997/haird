@@ -56,6 +56,9 @@ function SettingsContent() {
   const [apptStatus, setApptStatus] = useState('')
 
   const [pendingRequests, setPendingRequests] = useState([])
+  // Per-request manual date/time, only used for requests that came in before
+  // the calendar was connected (requested_start/end are null on that row).
+  const [manualTimes, setManualTimes] = useState({})
 
   useEffect(() => {
     (async () => {
@@ -204,14 +207,26 @@ function SettingsContent() {
   const handleConfirmRequest = async (requestId, action) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
+
+    const manual = manualTimes[requestId]
     const res = await fetch('/api/appointments/confirm', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestId, action }),
+      body: JSON.stringify({
+        requestId, action,
+        manualDate: manual?.date || undefined,
+        manualTime: manual?.time || undefined,
+      }),
     })
     const data = await res.json()
+    if (data.needsManualTime) {
+      // Reveal the date/time inputs on this card instead of just erroring out.
+      setManualTimes(prev => ({ ...prev, [requestId]: prev[requestId] || { date: '', time: '' } }))
+      return
+    }
     if (data.error) { alert(data.error); return }
     setPendingRequests(prev => prev.filter(r => r.id !== requestId))
+    setManualTimes(prev => { const next = { ...prev }; delete next[requestId]; return next })
   }
 
   const formatEventTime = (value) => {
@@ -253,8 +268,30 @@ function SettingsContent() {
                   <div className="text-ink"><strong>Service:</strong> {r.service_type || 'Not specified'}</div>
                   <div className="text-ink"><strong>Time:</strong> {r.requested_start ? formatEventTime(r.requested_start) : 'Not set (calendar not connected)'}</div>
                   {r.notes && <div className="text-mute mt-1">{r.notes}</div>}
+                  {!r.requested_start && manualTimes[r.id] && (
+                    <div className="mt-2.5 flex gap-2">
+                      <input
+                        type="date"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-[12.5px]"
+                        value={manualTimes[r.id].date}
+                        onChange={e => setManualTimes(prev => ({ ...prev, [r.id]: { ...prev[r.id], date: e.target.value } }))}
+                      />
+                      <input
+                        type="time"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-[12.5px]"
+                        value={manualTimes[r.id].time}
+                        onChange={e => setManualTimes(prev => ({ ...prev, [r.id]: { ...prev[r.id], time: e.target.value } }))}
+                      />
+                    </div>
+                  )}
                   <div className="mt-2.5 flex gap-2">
-                    <button onClick={() => handleConfirmRequest(r.id, 'confirm')} className="flex-1 rounded-md bg-sage py-1.5 text-[12.5px] font-semibold text-white hover:bg-sage-dark transition">Confirm</button>
+                    <button
+                      onClick={() => handleConfirmRequest(r.id, 'confirm')}
+                      disabled={!r.requested_start && manualTimes[r.id] && (!manualTimes[r.id].date || !manualTimes[r.id].time)}
+                      className="flex-1 rounded-md bg-sage py-1.5 text-[12.5px] font-semibold text-white hover:bg-sage-dark transition disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {!r.requested_start && manualTimes[r.id] ? 'Confirm with this time' : 'Confirm'}
+                    </button>
                     <button onClick={() => handleConfirmRequest(r.id, 'decline')} className="flex-1 rounded-md border border-line bg-white py-1.5 text-[12.5px] font-semibold text-ink hover:bg-porcelain transition">Decline</button>
                   </div>
                 </div>
