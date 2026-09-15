@@ -95,7 +95,7 @@ export async function POST(req, { params }) {
       phone_number: normalizedPhone,
       service_type: service || null,
       notes: message || null,
-      status: 'new',
+      status: 'pending',
     })
     .select('id').single()
 
