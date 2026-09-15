@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { createCalendarEvent } from '@/lib/google-calendar'
+import { createCalendarEvent, zonedTimeToUtcISO } from '@/lib/google-calendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +25,10 @@ export async function POST(req) {
     return Response.json({ error: 'Account not found' }, { status: 404 })
   }
 
-  const { requestId, action } = await req.json()
+  // manualDate/manualTime/manualDurationMin are only used when the request
+  // was created before the calendar was connected (requested_start/end are
+  // null) — the Settings page prompts the owner for a time and sends it here.
+  const { requestId, action, manualDate, manualTime, manualDurationMin } = await req.json()
   if (!requestId || !['confirm', 'decline'].includes(action)) {
     return Response.json({ error: 'Invalid parameters' }, { status: 400 })
   }
@@ -43,16 +46,36 @@ export async function POST(req) {
 
   const { data: biz } = await supabaseAdmin
     .from('business_settings').select('timezone').eq('stylist_id', stylist.id).maybeSingle()
+  const timeZone = biz?.timezone || 'America/New_York'
+
+  // This request came in while the calendar wasn't connected, so it has no
+  // requested_start/end — we need a time from the owner before we can write
+  // anything to the calendar. Ask for one instead of failing with a
+  // misleading "check your calendar connection" error.
+  let startISO = reqRow.requested_start
+  let endISO = reqRow.requested_end
+  if (!startISO || !endISO) {
+    if (!manualDate || !manualTime) {
+      return Response.json({
+        error: 'This request has no time on file — please enter a date and time to confirm it.',
+        needsManualTime: true,
+      }, { status: 400 })
+    }
+    startISO = zonedTimeToUtcISO(manualDate, manualTime, timeZone)
+    endISO = new Date(new Date(startISO).getTime() + (manualDurationMin || 60) * 60000).toISOString()
+  }
 
   try {
     await createCalendarEvent(stylist.id, {
       summary: `Appointment: ${reqRow.service_type || 'Service'}`,
       description: `Customer phone: ${reqRow.phone_number}\nNotes: ${reqRow.notes || ''}`,
-      startISO: reqRow.requested_start,
-      endISO: reqRow.requested_end,
-      timeZone: biz?.timezone || 'America/New_York',
+      startISO,
+      endISO,
+      timeZone,
     })
-    await supabaseAdmin.from('appointment_requests').update({ status: 'confirmed' }).eq('id', requestId)
+    await supabaseAdmin.from('appointment_requests')
+      .update({ status: 'confirmed', requested_start: startISO, requested_end: endISO })
+      .eq('id', requestId)
     return Response.json({ success: true })
   } catch (err) {
     console.error('Failed to write confirmed appointment to calendar:', err)
