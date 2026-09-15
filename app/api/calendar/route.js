@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { createClient } from '@supabase/supabase-js'
+import { disconnectAndNotify } from '@/lib/google-calendar'
 
 export async function GET(req) {
   const supabaseAdmin = getSupabaseAdmin()
@@ -75,10 +76,17 @@ export async function GET(req) {
 
     return Response.json({ events })
   } catch (err) {
-    const message = err?.response?.data?.error === 'invalid_grant'
-      ? 'Authorization has expired — please reconnect Google Calendar'
-      : 'Failed to load calendar — please try again later'
+    const isPermanentAuthError = err?.response?.data?.error === 'invalid_grant' || err?.message?.includes('invalid_grant')
+
+    if (isPermanentAuthError) {
+      // Same self-healing path as lib/google-calendar.js: clear the dead
+      // token (so Settings stops showing "Connected") and email the salon
+      // owner, instead of just showing them a dead end in the UI.
+      await disconnectAndNotify(stylist.id)
+      return Response.json({ error: 'Authorization has expired — we\'ve emailed you a reconnect link, or you can reconnect right here on this page' }, { status: 401 })
+    }
+
     console.error('Failed to load Google Calendar:', err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: 'Failed to load calendar — please try again later' }, { status: 500 })
   }
 }
