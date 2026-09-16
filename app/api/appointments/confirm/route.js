@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { createCalendarEvent, zonedTimeToUtcISO } from '@/lib/google-calendar'
+import { createCalendarEvent, getFreeBusy, isSlotFree, zonedTimeToUtcISO } from '@/lib/google-calendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +28,7 @@ export async function POST(req) {
   // manualDate/manualTime/manualDurationMin are only used when the request
   // was created before the calendar was connected (requested_start/end are
   // null) — the Settings page prompts the owner for a time and sends it here.
-  const { requestId, action, manualDate, manualTime, manualDurationMin } = await req.json()
+  const { requestId, action, manualDate, manualTime, manualDurationMin, overrideConflict } = await req.json()
   if (!requestId || !['confirm', 'decline'].includes(action)) {
     return Response.json({ error: 'Invalid parameters' }, { status: 400 })
   }
@@ -63,6 +63,27 @@ export async function POST(req) {
     }
     startISO = zonedTimeToUtcISO(manualDate, manualTime, timeZone)
     endISO = new Date(new Date(startISO).getTime() + (manualDurationMin || 60) * 60000).toISOString()
+  }
+
+  // Check for a real conflict before committing to the calendar. Without
+  // this, two customers can be confirmed into the exact same slot — the
+  // manual-confirm path previously wrote straight to the calendar with no
+  // availability check at all.
+  if (!overrideConflict) {
+    try {
+      const busy = await getFreeBusy(stylist.id, startISO, endISO)
+      if (!isSlotFree(busy, startISO, endISO)) {
+        return Response.json({
+          error: 'This time overlaps with an existing appointment on your calendar.',
+          hasConflict: true,
+        }, { status: 409 })
+      }
+    } catch (err) {
+      // A failed availability check shouldn't silently block a confirmation —
+      // fall through and let createCalendarEvent below surface a real error
+      // (e.g. auth failure) if the connection itself is the problem.
+      console.error('Free/busy check failed, proceeding without it:', err)
+    }
   }
 
   try {
