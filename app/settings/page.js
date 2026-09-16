@@ -59,6 +59,7 @@ function SettingsContent() {
   // Per-request manual date/time, only used for requests that came in before
   // the calendar was connected (requested_start/end are null on that row).
   const [manualTimes, setManualTimes] = useState({})
+  const [conflicts, setConflicts] = useState({})
 
   useEffect(() => {
     (async () => {
@@ -204,7 +205,7 @@ function SettingsContent() {
     }
   }
 
-  const handleConfirmRequest = async (requestId, action) => {
+  const handleConfirmRequest = async (requestId, action, force = false) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
@@ -216,6 +217,7 @@ function SettingsContent() {
         requestId, action,
         manualDate: manual?.date || undefined,
         manualTime: manual?.time || undefined,
+        overrideConflict: force,
       }),
     })
     const data = await res.json()
@@ -224,9 +226,16 @@ function SettingsContent() {
       setManualTimes(prev => ({ ...prev, [requestId]: prev[requestId] || { date: '', time: '' } }))
       return
     }
+    if (data.hasConflict) {
+      // Don't silently double-book — make the owner explicitly choose to
+      // proceed once they've seen the warning.
+      setConflicts(prev => ({ ...prev, [requestId]: true }))
+      return
+    }
     if (data.error) { alert(data.error); return }
     setPendingRequests(prev => prev.filter(r => r.id !== requestId))
     setManualTimes(prev => { const next = { ...prev }; delete next[requestId]; return next })
+    setConflicts(prev => { const next = { ...prev }; delete next[requestId]; return next })
   }
 
   const formatEventTime = (value) => {
@@ -284,13 +293,18 @@ function SettingsContent() {
                       />
                     </div>
                   )}
+                  {conflicts[r.id] && (
+                    <div className="mt-2.5 rounded-md bg-oxblood/10 border border-oxblood/25 px-2.5 py-2 text-[12px] text-oxblood">
+                      ⚠️ This overlaps with an existing appointment on your calendar.
+                    </div>
+                  )}
                   <div className="mt-2.5 flex gap-2">
                     <button
-                      onClick={() => handleConfirmRequest(r.id, 'confirm')}
+                      onClick={() => handleConfirmRequest(r.id, 'confirm', conflicts[r.id])}
                       disabled={!r.requested_start && manualTimes[r.id] && (!manualTimes[r.id].date || !manualTimes[r.id].time)}
-                      className="flex-1 rounded-md bg-sage py-1.5 text-[12.5px] font-semibold text-white hover:bg-sage-dark transition disabled:opacity-50 disabled:pointer-events-none"
+                      className={`flex-1 rounded-md py-1.5 text-[12.5px] font-semibold text-white transition disabled:opacity-50 disabled:pointer-events-none ${conflicts[r.id] ? 'bg-oxblood hover:bg-oxblood-dark' : 'bg-sage hover:bg-sage-dark'}`}
                     >
-                      {!r.requested_start && manualTimes[r.id] ? 'Confirm with this time' : 'Confirm'}
+                      {conflicts[r.id] ? 'Book anyway' : !r.requested_start && manualTimes[r.id] ? 'Confirm with this time' : 'Confirm'}
                     </button>
                     <button onClick={() => handleConfirmRequest(r.id, 'decline')} className="flex-1 rounded-md border border-line bg-white py-1.5 text-[12.5px] font-semibold text-ink hover:bg-porcelain transition">Decline</button>
                   </div>
