@@ -27,24 +27,42 @@ export async function GET(req) {
   const supabaseAdmin = getSupabaseAdmin()
   const { data: pool, error } = await supabaseAdmin
     .from('phone_number_pool')
-    .select('phone_number, status, assigned_to, assigned_at, created_at')
+    .select('phone_number, status, verified, assigned_to, assigned_at, created_at')
     .order('created_at', { ascending: true })
 
   if (error) return Response.json({ error: 'Failed to load pool' }, { status: 500 })
 
-  const available = pool.filter(p => p.status === 'available').length
+  const available = pool.filter(p => p.status === 'available' && p.verified).length
+  const pendingVerification = pool.filter(p => p.status === 'available' && !p.verified).length
   const assigned = pool.filter(p => p.status === 'assigned').length
 
   const { data: waiting } = await supabaseAdmin
     .from('stylists').select('id, name, email').eq('needs_number_provisioning', true)
 
-  return Response.json({ available, assigned, total: pool.length, pool, waitingStylists: waiting || [] })
+  return Response.json({ available, pendingVerification, assigned, total: pool.length, pool, waitingStylists: waiting || [] })
 }
 
 // Buys `count` new numbers into the pool. Slow on purpose (one at a time,
 // sequential) — this hits Twilio's real purchase API, so a tight loop isn't
 // something you want to fire off carelessly. Meant to be called a few
 // numbers at a time from the admin dashboard, not for bulk-buying hundreds.
+export async function PATCH(req) {
+  const auth = await requireAdmin(req)
+  if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
+
+  const { phoneNumber, verified } = await req.json()
+  if (!phoneNumber) return Response.json({ error: 'Missing phoneNumber' }, { status: 400 })
+
+  const supabaseAdmin = getSupabaseAdmin()
+  const { error } = await supabaseAdmin
+    .from('phone_number_pool')
+    .update({ verified: verified !== false })
+    .eq('phone_number', phoneNumber)
+
+  if (error) return Response.json({ error: 'Failed to update' }, { status: 500 })
+  return Response.json({ success: true })
+}
+
 export async function POST(req) {
   const auth = await requireAdmin(req)
   if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
