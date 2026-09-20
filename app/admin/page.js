@@ -34,6 +34,15 @@ export default function AdminPage() {
     })()
   }, [])
 
+  const handleMarkVerified = async (phoneNumber) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    await fetch('/api/admin/phone-pool', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber, verified: true }),
+    })
+    await loadPool(session)
+  }
   const handleBuyNumbers = async (count) => {
     setBuying(true)
     setBuyStatus(`Buying ${count} number${count > 1 ? 's' : ''}...`)
@@ -123,7 +132,11 @@ export default function AdminPage() {
           <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
             <div>
               <div style={{ fontSize: 24, fontWeight: 700, color: pool.available === 0 ? '#d93025' : '#111' }}>{pool.available}</div>
-              <div style={{ fontSize: 11, color: '#888' }}>Available</div>
+              <div style={{ fontSize: 11, color: '#888' }}>Ready to assign</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: pool.pendingVerification > 0 ? '#b98900' : '#111' }}>{pool.pendingVerification}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>Pending verification</div>
             </div>
             <div>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{pool.assigned}</div>
@@ -134,6 +147,19 @@ export default function AdminPage() {
               <div style={{ fontSize: 11, color: '#888' }}>Total owned</div>
             </div>
           </div>
+
+          {pool.pendingVerification > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              {pool.pool.filter(p => p.status === 'available' && !p.verified).map(p => (
+                <div key={p.phone_number} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '6px 0' }}>
+                  <span>📞 {p.phone_number} <span style={{ color: '#b98900' }}>— awaiting Twilio toll-free verification</span></span>
+                  <button onClick={() => handleMarkVerified(p.phone_number)} style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #ddd', background: 'white', cursor: 'pointer' }}>
+                    Mark verified
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {pool.waitingStylists?.length > 0 && (
             <div style={{ fontSize: 12.5, background: '#fff8e6', border: '1px solid #ffe4a3', borderRadius: 8, padding: 10, marginBottom: 12 }}>
