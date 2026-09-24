@@ -147,8 +147,9 @@ export default function PublicBookingPage() {
             required
           />
           <span>
-            By checking this box, I agree to receive text messages from{' '}
-            {biz?.business_name || 'Veloceia'} regarding my appointments and support.
+            By checking this box, I agree to receive appointment updates and customer
+            support text messages from {biz?.business_name || 'this business'} via
+            Veloceia (operated by Xinwei (Tongxiang) E-Commerce Co., Ltd.).
             Message frequency varies. Message and data rates may apply. Reply STOP to opt
             out, HELP for help. View our{' '}
             <a href="/privacy" target="_blank" rel="noopener noreferrer">
