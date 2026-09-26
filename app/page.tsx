@@ -246,9 +246,14 @@ function HomeContent() {
     <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-zinc-200">
       <nav className="flex items-center justify-between px-6 py-6 max-w-6xl mx-auto">
         <div className="text-xl font-bold tracking-tighter">Veloceia.</div>
-        <Link href="/login" className="text-sm font-medium hover:text-zinc-500 transition-colors">
-          Log in
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/affiliate" className="text-sm font-medium hover:text-zinc-500 transition-colors">
+            Affiliate
+          </Link>
+          <Link href="/login" className="text-sm font-medium hover:text-zinc-500 transition-colors">
+            Log in
+          </Link>
+        </div>
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 pt-20 pb-20 text-center">
@@ -478,6 +483,7 @@ function HomeContent() {
           </div>
           <div className="flex gap-6 text-sm font-medium text-zinc-500">
             <a href="mailto:support@veloceia.com" className="hover:text-black transition">Contact: support@veloceia.com</a>
+            <Link href="/affiliate" className="hover:text-black transition">Affiliate</Link>
             <Link href="/terms" className="hover:text-black transition">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-black transition">Privacy Policy</Link>
           </div>
