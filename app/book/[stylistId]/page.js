@@ -9,7 +9,7 @@ export default function PublicBookingPage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
-  const [form, setForm] = useState({ name: '', phone: '', service: '', message: '', agreed: false })
+  const [form, setForm] = useState({ name: '', phone: '', service: '', message: '', date: '', time: '', duration: 60, agreed: false })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -31,6 +31,10 @@ export default function PublicBookingPage() {
 
     if (!form.phone.trim()) {
       setError('Please enter your phone number.')
+      return
+    }
+    if (!form.date || !form.time) {
+      setError('Please choose a preferred date and time.')
       return
     }
     if (!form.agreed) {
@@ -79,7 +83,8 @@ export default function PublicBookingPage() {
         <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
         <h1 style={{ fontSize: 22, marginBottom: 8 }}>Request received!</h1>
         <p style={{ color: '#666', fontSize: 15 }}>
-          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} will text you shortly to confirm.
+          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} will text you shortly to confirm
+          {form.date && form.time ? ' your requested time' : ''}.
         </p>
       </div>
     )
@@ -129,6 +134,43 @@ export default function PublicBookingPage() {
           value={form.service}
           onChange={(e) => setForm({ ...form, service: e.target.value })}
         />
+
+        <label style={label}>When would you like to come?</label>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <input
+              style={input}
+              type="date"
+              value={form.date}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              required
+            />
+            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Preferred date</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <input
+              style={input}
+              type="time"
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+              required
+            />
+            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Preferred time</div>
+          </div>
+        </div>
+
+        <label style={label}>Appointment length</label>
+        <select
+          style={input}
+          value={form.duration}
+          onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })}
+        >
+          <option value={30}>30 minutes</option>
+          <option value={60}>60 minutes</option>
+          <option value={90}>90 minutes</option>
+          <option value={120}>120 minutes</option>
+        </select>
 
         <label style={label}>Anything else we should know? (optional)</label>
         <textarea
