@@ -279,6 +279,29 @@ function SettingsContent() {
     return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
+  // Two requests "overlap" if their [start, end) windows intersect. This
+  // compares the *current* editable values in manualTimes (not the raw
+  // requested_start/end), so if the owner nudges one request's time to
+  // resolve a clash, the warning updates immediately without a round trip.
+  const timesOverlap = (a, b) => {
+    if (!a?.date || !a?.time || !b?.date || !b?.time) return false
+    const aStart = new Date(`${a.date}T${a.time}`).getTime()
+    const aEnd = aStart + (a.duration || 60) * 60000
+    const bStart = new Date(`${b.date}T${b.time}`).getTime()
+    const bEnd = bStart + (b.duration || 60) * 60000
+    return aStart < bEnd && bStart < aEnd
+  }
+
+  // For each pending request, how many *other* pending requests currently
+  // clash with it — surfaced before the owner ever clicks Confirm, instead
+  // of only discovering it one click at a time via the calendar conflict check.
+  const overlapCounts = {}
+  pendingRequests.forEach(r => {
+    overlapCounts[r.id] = pendingRequests.filter(
+      other => other.id !== r.id && timesOverlap(manualTimes[r.id], manualTimes[other.id])
+    ).length
+  })
+
   const bookingUrl = stylistId && typeof window !== 'undefined' ? `${window.location.origin}/book/${stylistId}` : ''
 
   return (
@@ -306,7 +329,12 @@ function SettingsContent() {
             </h2>
             <div className="space-y-2">
               {pendingRequests.map(r => (
-                <div key={r.id} className="rounded-lg bg-white border border-line p-3.5 text-[13px]">
+                <div key={r.id} className={`rounded-lg bg-white border p-3.5 text-[13px] ${overlapCounts[r.id] > 0 ? 'border-brass' : 'border-line'}`}>
+                  {overlapCounts[r.id] > 0 && (
+                    <div className="mb-2.5 rounded-md bg-brass/10 border border-brass/30 px-2.5 py-2 text-[12px] text-ink">
+                      ⚠️ Same time as {overlapCounts[r.id]} other pending request{overlapCounts[r.id] > 1 ? 's' : ''} below — you can only confirm one of these for this slot (unless you can genuinely take both at once).
+                    </div>
+                  )}
                   <div className="text-ink"><strong>Phone:</strong> {r.phone_number}</div>
                   <div className="text-ink"><strong>Service:</strong> {r.service_type || 'Not specified'}</div>
                   {r.notes && <div className="text-mute mt-1">{r.notes}</div>}
