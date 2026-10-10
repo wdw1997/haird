@@ -25,9 +25,9 @@ export async function POST(req) {
     return Response.json({ error: 'Account not found' }, { status: 404 })
   }
 
-  // manualDate/manualTime/manualDurationMin are only used when the request
-  // was created before the calendar was connected (requested_start/end are
-  // null) — the Settings page prompts the owner for a time and sends it here.
+  // manualDate/manualTime/manualDurationMin carry whatever time is showing
+  // in the Settings page's editable fields for this request — either the
+  // customer's original requested time, or a time the owner changed it to.
   const { requestId, action, manualDate, manualTime, manualDurationMin, overrideConflict } = await req.json()
   if (!requestId || !['confirm', 'decline'].includes(action)) {
     return Response.json({ error: 'Invalid parameters' }, { status: 400 })
@@ -48,21 +48,26 @@ export async function POST(req) {
     .from('business_settings').select('timezone').eq('stylist_id', stylist.id).maybeSingle()
   const timeZone = biz?.timezone || 'America/New_York'
 
-  // This request came in while the calendar wasn't connected, so it has no
-  // requested_start/end — we need a time from the owner before we can write
-  // anything to the calendar. Ask for one instead of failing with a
-  // misleading "check your calendar connection" error.
-  let startISO = reqRow.requested_start
-  let endISO = reqRow.requested_end
-  if (!startISO || !endISO) {
-    if (!manualDate || !manualTime) {
+  // The owner can always adjust the time before confirming — the Settings
+  // page now pre-fills manualDate/manualTime from the customer's requested
+  // time for every pending request, so whatever is sent here (edited or
+  // not) is what actually gets booked. Only fall back to the stored
+  // requested_start/end if the owner's card somehow didn't send one — and
+  // if there's nothing there either (a request that predates the calendar
+  // connection, with no time on file at all), ask for one explicitly.
+  let startISO, endISO
+  if (manualDate && manualTime) {
+    startISO = zonedTimeToUtcISO(manualDate, manualTime, timeZone)
+    endISO = new Date(new Date(startISO).getTime() + (manualDurationMin || 60) * 60000).toISOString()
+  } else {
+    startISO = reqRow.requested_start
+    endISO = reqRow.requested_end
+    if (!startISO || !endISO) {
       return Response.json({
         error: 'This request has no time on file — please enter a date and time to confirm it.',
         needsManualTime: true,
       }, { status: 400 })
     }
-    startISO = zonedTimeToUtcISO(manualDate, manualTime, timeZone)
-    endISO = new Date(new Date(startISO).getTime() + (manualDurationMin || 60) * 60000).toISOString()
   }
 
   // Check for a real conflict before committing to the calendar. Without
