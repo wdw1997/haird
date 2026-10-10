@@ -13,6 +13,22 @@ const TIMEZONES = [
   { value: 'Asia/Shanghai', label: 'China (Shanghai)' },
 ]
 
+// Reverse of zonedTimeToUtcISO (lib/google-calendar.js) — turns a stored UTC
+// timestamp back into the date/time strings a <input type="date"/"time">
+// expects, in the business's own timezone, so the owner's edit box starts
+// out showing the customer's actual requested time instead of UTC.
+function utcToZonedParts(iso, timeZone) {
+  if (!iso) return { date: '', time: '' }
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return { date: '', time: '' }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d)
+  const get = (type) => parts.find(p => p.type === type)?.value || ''
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` }
+}
+
 const TABS = [
   { id: 'details', label: 'Salon Details', dot: 'bg-oxblood' },
   { id: 'connections', label: 'Connections', dot: 'bg-sage' },
@@ -56,8 +72,10 @@ function SettingsContent() {
   const [apptStatus, setApptStatus] = useState('')
 
   const [pendingRequests, setPendingRequests] = useState([])
-  // Per-request manual date/time, only used for requests that came in before
-  // the calendar was connected (requested_start/end are null on that row).
+  // Per-request editable date/time/duration. Pre-filled from the customer's
+  // requested_start/end (converted into the business's own timezone) so the
+  // owner can see and change the time before confirming — not just for
+  // requests that came in before the calendar was connected.
   const [manualTimes, setManualTimes] = useState({})
   const [conflicts, setConflicts] = useState({})
 
@@ -94,6 +112,21 @@ function SettingsContent() {
         .from('appointment_requests').select('*').eq('stylist_id', stylist.id).eq('status', 'pending')
         .order('created_at', { ascending: false })
       setPendingRequests(requests || [])
+
+      const tz = biz?.timezone || 'America/New_York'
+      const initialManual = {}
+      ;(requests || []).forEach(r => {
+        if (r.requested_start) {
+          const { date, time } = utcToZonedParts(r.requested_start, tz)
+          const duration = r.requested_end
+            ? Math.max(5, Math.round((new Date(r.requested_end) - new Date(r.requested_start)) / 60000))
+            : 60
+          initialManual[r.id] = { date, time, duration }
+        } else {
+          initialManual[r.id] = { date: '', time: '', duration: 60 }
+        }
+      })
+      setManualTimes(initialManual)
     })()
   }, [])
 
@@ -217,6 +250,7 @@ function SettingsContent() {
         requestId, action,
         manualDate: manual?.date || undefined,
         manualTime: manual?.time || undefined,
+        manualDurationMin: manual?.duration || undefined,
         overrideConflict: force,
       }),
     })
@@ -275,24 +309,48 @@ function SettingsContent() {
                 <div key={r.id} className="rounded-lg bg-white border border-line p-3.5 text-[13px]">
                   <div className="text-ink"><strong>Phone:</strong> {r.phone_number}</div>
                   <div className="text-ink"><strong>Service:</strong> {r.service_type || 'Not specified'}</div>
-                  <div className="text-ink"><strong>Time:</strong> {r.requested_start ? formatEventTime(r.requested_start) : 'Not set (calendar not connected)'}</div>
                   {r.notes && <div className="text-mute mt-1">{r.notes}</div>}
-                  {!r.requested_start && manualTimes[r.id] && (
-                    <div className="mt-2.5 flex gap-2">
+                  <div className="text-mute mt-1">
+                    Requested: {r.requested_start ? formatEventTime(r.requested_start) : 'No time on file (calendar wasn’t connected yet)'}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[11px] text-mute mb-1">Date</div>
                       <input
                         type="date"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-[12.5px]"
-                        value={manualTimes[r.id].date}
+                        className="w-full rounded-md border border-line px-2 py-1.5 text-[12.5px]"
+                        value={manualTimes[r.id]?.date || ''}
                         onChange={e => setManualTimes(prev => ({ ...prev, [r.id]: { ...prev[r.id], date: e.target.value } }))}
                       />
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-mute mb-1">Time</div>
                       <input
                         type="time"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-[12.5px]"
-                        value={manualTimes[r.id].time}
+                        className="w-full rounded-md border border-line px-2 py-1.5 text-[12.5px]"
+                        value={manualTimes[r.id]?.time || ''}
                         onChange={e => setManualTimes(prev => ({ ...prev, [r.id]: { ...prev[r.id], time: e.target.value } }))}
                       />
                     </div>
-                  )}
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-[11px] text-mute mb-1">Duration</div>
+                    <select
+                      className="w-full rounded-md border border-line px-2 py-1.5 text-[12.5px]"
+                      value={manualTimes[r.id]?.duration || 60}
+                      onChange={e => setManualTimes(prev => ({ ...prev, [r.id]: { ...prev[r.id], duration: Number(e.target.value) } }))}
+                    >
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>60 minutes</option>
+                      <option value={90}>90 minutes</option>
+                      <option value={120}>120 minutes</option>
+                    </select>
+                  </div>
+                  <div className="mt-1.5 text-[11.5px] text-mute">
+                    Choose the final time before confirming. Google Calendar availability will be checked again.
+                  </div>
+
                   {conflicts[r.id] && (
                     <div className="mt-2.5 rounded-md bg-oxblood/10 border border-oxblood/25 px-2.5 py-2 text-[12px] text-oxblood">
                       ⚠️ This overlaps with an existing appointment on your calendar.
@@ -301,10 +359,10 @@ function SettingsContent() {
                   <div className="mt-2.5 flex gap-2">
                     <button
                       onClick={() => handleConfirmRequest(r.id, 'confirm', conflicts[r.id])}
-                      disabled={!r.requested_start && manualTimes[r.id] && (!manualTimes[r.id].date || !manualTimes[r.id].time)}
+                      disabled={!manualTimes[r.id]?.date || !manualTimes[r.id]?.time}
                       className={`flex-1 rounded-md py-1.5 text-[12.5px] font-semibold text-white transition disabled:opacity-50 disabled:pointer-events-none ${conflicts[r.id] ? 'bg-oxblood hover:bg-oxblood-dark' : 'bg-sage hover:bg-sage-dark'}`}
                     >
-                      {conflicts[r.id] ? 'Book anyway' : !r.requested_start && manualTimes[r.id] ? 'Confirm with this time' : 'Confirm'}
+                      {conflicts[r.id] ? 'Book anyway' : 'Confirm'}
                     </button>
                     <button onClick={() => handleConfirmRequest(r.id, 'decline')} className="flex-1 rounded-md border border-line bg-white py-1.5 text-[12.5px] font-semibold text-ink hover:bg-porcelain transition">Decline</button>
                   </div>
