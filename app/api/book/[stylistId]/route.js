@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { sendEmail } from '@/lib/resend-client'
+import { zonedTimeToUtcISO } from '@/lib/google-calendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,10 +53,19 @@ export async function POST(req, { params }) {
   const name = (body.name || '').trim().slice(0, 100)
   const message = (body.message || '').trim().slice(0, 500)
   const service = (body.service || '').trim().slice(0, 100)
+  const date = (body.date || '').trim()
+  const time = (body.time || '').trim()
+  const durationMin = Number(body.duration) || 60
   const agreed = body.agreed === true
 
   if (!isPlausiblePhone(phone)) {
     return Response.json({ error: 'Please enter a valid phone number.' }, { status: 400 })
+  }
+  // The customer picks a preferred time up front now, instead of leaving
+  // requested_start/end null until the owner manually sets one later —
+  // that's what let old requests reach "Confirm" with no time on file.
+  if (!date || !time) {
+    return Response.json({ error: 'Please choose a preferred date and time.' }, { status: 400 })
   }
   // The opt-in checkbox/language is what makes this page valid for carrier
   // toll-free verification — a submission without explicit consent doesn't
@@ -68,6 +78,21 @@ export async function POST(req, { params }) {
     .from('stylists').select('id, name, email').eq('id', stylistId).maybeSingle()
   if (!stylist) {
     return Response.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const { data: biz } = await supabaseAdmin
+    .from('business_settings').select('timezone').eq('stylist_id', stylistId).maybeSingle()
+  const timeZone = biz?.timezone || 'America/New_York'
+
+  let requestedStartISO, requestedEndISO
+  try {
+    requestedStartISO = zonedTimeToUtcISO(date, time, timeZone)
+    requestedEndISO = new Date(new Date(requestedStartISO).getTime() + durationMin * 60000).toISOString()
+  } catch {
+    return Response.json({ error: 'That date/time looks invalid — please try again.' }, { status: 400 })
+  }
+  if (new Date(requestedStartISO).getTime() < Date.now()) {
+    return Response.json({ error: 'Please choose a date and time in the future.' }, { status: 400 })
   }
 
   // Normalize to E.164-ish so this lines up with how numbers arrive via SMS
@@ -96,6 +121,8 @@ export async function POST(req, { params }) {
       service_type: service || null,
       notes: message || null,
       status: 'pending',
+      requested_start: requestedStartISO,
+      requested_end: requestedEndISO,
     })
     .select('id').single()
 
@@ -112,7 +139,8 @@ export async function POST(req, { params }) {
       html: `<p>You have a new request from your booking page.</p>
         <p><strong>Name:</strong> ${name || 'Not provided'}<br/>
         <strong>Phone:</strong> ${normalizedPhone}<br/>
-        <strong>Service:</strong> ${service || 'Not specified'}</p>
+        <strong>Service:</strong> ${service || 'Not specified'}<br/>
+        <strong>Requested time:</strong> ${date} ${time} (${timeZone})</p>
         ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
         <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/settings">View in your dashboard</a></p>`,
     })
