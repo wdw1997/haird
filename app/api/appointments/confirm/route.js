@@ -1,8 +1,26 @@
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { createCalendarEvent, getFreeBusy, isSlotFree, zonedTimeToUtcISO } from '@/lib/google-calendar'
+import { sendSms } from '@/lib/send-sms'
 
 export const dynamic = 'force-dynamic'
+
+// Set to false to stop sending a text when the owner declines a request.
+const SEND_DECLINE_SMS = true
+
+// Texts go out only AFTER the owner acts, so a customer is never told
+// "confirmed" for something that isn't. Skipped (not failed) when the
+// customer never agreed to be texted — e.g. a callback request.
+async function notifyCustomer({ supabaseAdmin, stylist, reqRow, body }) {
+  if (!reqRow.sms_consent) return { sent: false, reason: 'no_consent' }
+  return sendSms({ supabaseAdmin, stylist, to: reqRow.phone_number, body, clientId: reqRow.client_id })
+}
+
+function formatWhen(iso, timeZone) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(new Date(iso))
+}
 
 export async function POST(req) {
   const supabaseAdmin = getSupabaseAdmin()
@@ -20,7 +38,7 @@ export async function POST(req) {
   }
 
   const { data: stylist } = await supabaseAdmin
-    .from('stylists').select('id').eq('auth_user_id', userData.user.id).maybeSingle()
+    .from('stylists').select('id, name, twilio_number').eq('auth_user_id', userData.user.id).maybeSingle()
   if (!stylist) {
     return Response.json({ error: 'Account not found' }, { status: 404 })
   }
@@ -39,14 +57,29 @@ export async function POST(req) {
     return Response.json({ error: 'Appointment request not found' }, { status: 404 })
   }
 
-  if (action === 'decline') {
-    await supabaseAdmin.from('appointment_requests').update({ status: 'declined' }).eq('id', requestId)
-    return Response.json({ success: true })
+  // Guards against a double click (or two open tabs) booking the same
+  // request twice and texting the customer twice.
+  if (reqRow.status && reqRow.status !== 'pending') {
+    return Response.json({ error: 'This request has already been handled.' }, { status: 409 })
   }
 
   const { data: biz } = await supabaseAdmin
-    .from('business_settings').select('timezone').eq('stylist_id', stylist.id).maybeSingle()
+    .from('business_settings').select('timezone, business_name, address, contact_phone').eq('stylist_id', stylist.id).maybeSingle()
   const timeZone = biz?.timezone || 'America/New_York'
+  const bizName = biz?.business_name || stylist.name || 'Your stylist'
+
+  if (action === 'decline') {
+    await supabaseAdmin.from('appointment_requests').update({ status: 'declined' }).eq('id', requestId)
+    let sms = { sent: false, reason: 'disabled' }
+    if (SEND_DECLINE_SMS) {
+      const callLine = biz?.contact_phone ? ` Please call ${biz.contact_phone} or send a new request.` : ' Please send a new request for another time.'
+      sms = await notifyCustomer({
+        supabaseAdmin, stylist, reqRow,
+        body: `${bizName}: Sorry, we can't fit in the time you requested.${callLine} Reply STOP to opt out.`,
+      })
+    }
+    return Response.json({ success: true, sms })
+  }
 
   // The owner can always adjust the time before confirming — the Settings
   // page now pre-fills manualDate/manualTime from the customer's requested
@@ -102,7 +135,17 @@ export async function POST(req) {
     await supabaseAdmin.from('appointment_requests')
       .update({ status: 'confirmed', requested_start: startISO, requested_end: endISO })
       .eq('id', requestId)
-    return Response.json({ success: true })
+
+    // The calendar write already succeeded — a failed text must not turn
+    // this into an error, so the result is just reported back to the owner.
+    const changeLine = biz?.contact_phone ? ` To change it, call ${biz.contact_phone}.` : ''
+    const addressLine = biz?.address ? ` Address: ${biz.address}.` : ''
+    const serviceLine = reqRow.service_type ? ` (${reqRow.service_type})` : ''
+    const sms = await notifyCustomer({
+      supabaseAdmin, stylist, reqRow,
+      body: `${bizName}: Your appointment${serviceLine} is confirmed for ${formatWhen(startISO, timeZone)}.${addressLine}${changeLine} Reply STOP to opt out.`,
+    })
+    return Response.json({ success: true, sms })
   } catch (err) {
     console.error('Failed to write confirmed appointment to calendar:', err)
     return Response.json({ error: 'Failed to write to calendar — please check your Google Calendar connection' }, { status: 500 })
