@@ -267,6 +267,18 @@ function SettingsContent() {
       return
     }
     if (data.error) { alert(data.error); return }
+    // The booking itself succeeded; tell the owner if the customer text didn't go out.
+    if (data.sms && !data.sms.sent && data.sms.reason !== 'disabled') {
+      const phone = pendingRequests.find(r => r.id === requestId)?.phone_number || 'the customer'
+      const why = {
+        no_consent: `${phone} didn't agree to text messages (for example a callback request), so no text was sent — please tell them yourself.`,
+        no_sender_number: `no text was sent because your dedicated number isn't active yet — please let ${phone} know yourself.`,
+        opted_out: `no text was sent because ${phone} opted out of texts — please let them know yourself.`,
+        invalid_number: `no text was sent because ${phone} isn't a valid mobile number — please contact them yourself.`,
+        send_failed: `the text to ${phone} couldn't be delivered — please let them know yourself.`,
+      }[data.sms.reason] || 'no text was sent to the customer.'
+      alert(`${action === 'confirm' ? 'Appointment confirmed' : 'Request declined'}, but ${why}`)
+    }
     setPendingRequests(prev => prev.filter(r => r.id !== requestId))
     setManualTimes(prev => { const next = { ...prev }; delete next[requestId]; return next })
     setConflicts(prev => { const next = { ...prev }; delete next[requestId]; return next })
@@ -333,6 +345,11 @@ function SettingsContent() {
                   {overlapCounts[r.id] > 0 && (
                     <div className="mb-2.5 rounded-md bg-brass/10 border border-brass/30 px-2.5 py-2 text-[12px] text-ink">
                       ⚠️ Same time as {overlapCounts[r.id]} other pending request{overlapCounts[r.id] > 1 ? 's' : ''} below — you can only confirm one of these for this slot (unless you can genuinely take both at once).
+                    </div>
+                  )}
+                  {r.source === 'callback' && (
+                    <div className="mb-1.5 inline-block rounded-md bg-brass/10 border border-brass/30 px-2 py-0.5 text-[11.5px] font-semibold text-ink">
+                      📞 Callback request — call them, agree a time, then enter it below
                     </div>
                   )}
                   <div className="text-ink"><strong>Phone:</strong> {r.phone_number}</div>
