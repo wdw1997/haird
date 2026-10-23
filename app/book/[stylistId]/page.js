@@ -86,7 +86,7 @@ function ChatBox({ stylistId, biz }) {
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize: 17, margin: '0 0 4px' }}>💬 Book with our AI assistant</h2>
-      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Chat to find a time — {biz?.business_name || 'the salon'} confirms it and texts you.</p>
+      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Chat to find a time — {biz?.business_name || 'the salon'} confirms it{biz?.can_text ? ' and texts you' : ' and contacts you'}.</p>
 
       {!started ? (
         <form onSubmit={startChat}>
@@ -116,7 +116,7 @@ function ChatBox({ stylistId, biz }) {
           </div>
           {requested && (
             <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', borderRadius: 8, padding: '8px 12px', margin: '10px 0 0' }}>
-              ✅ Request sent. {biz?.business_name || 'The salon'} will text you once it's confirmed.
+              ✅ Request sent. {biz?.business_name || 'The salon'} {biz?.can_text ? 'will text you once it\'s confirmed.' : 'will contact you to confirm.'}
             </p>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -301,7 +301,7 @@ export default function PublicBookingPage() {
         <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
         <h1 style={{ fontSize: 22, marginBottom: 8 }}>Request received!</h1>
         <p style={{ color: '#666', fontSize: 15 }}>
-          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} will text you shortly to confirm
+          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} {biz?.can_text ? 'will text you' : 'will contact you'} shortly to confirm
           {form.date && form.time ? ' your requested time' : ''}.
         </p>
       </div>
@@ -313,7 +313,7 @@ export default function PublicBookingPage() {
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{biz?.business_name || 'Book an appointment'}</h1>
       {biz?.address && <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>{biz.address}</p>}
       <p style={{ color: '#666', fontSize: 15, marginTop: 16 }}>
-        Book online, or call us. We'll text you once your time is confirmed.
+        Book online, or call us. {biz?.can_text ? "We'll text you once your time is confirmed." : "We'll contact you once your time is confirmed."}
       </p>
 
       {biz?.services?.length > 0 && (
