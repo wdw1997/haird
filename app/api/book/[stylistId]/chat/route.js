@@ -63,7 +63,7 @@ export async function POST(req, { params }) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
   if (!isWebChatEnabled(stylist)) {
-    return Response.json({ error: 'chat_unavailable', message: 'Chat is not available right now — please use the booking form or call us.' }, { status: 403 })
+    return Response.json({ error: 'chat_unavailable', message: 'This chat has reached its limit for now — please use the booking form or call us.' }, { status: 403 })
   }
 
   // Rate limits: per browser session, per IP, and per salon.
