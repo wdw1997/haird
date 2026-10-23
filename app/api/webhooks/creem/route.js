@@ -6,7 +6,7 @@ import { sendEmail } from '@/lib/resend-client'
 export const dynamic = 'force-dynamic'
 
 const PLAN_LIMITS = {
-  free: { sms_limit: 3, voice_limit: 3 },
+  free: { sms_limit: 6, voice_limit: 3 },
   pro: { sms_limit: 200, voice_limit: 300 },
   team: { sms_limit: 600, voice_limit: 1000 },
 }
