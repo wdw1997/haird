@@ -1,15 +1,44 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 
-const inputStyle = { padding: 12, borderRadius: 8, border: '1px solid #ccc', width: '100%', fontSize: 15, boxSizing: 'border-box' }
+const inputStyle = { padding: 12, borderRadius: 8, border: '1px solid #ccc', width: '100%', fontSize: 15, boxSizing: 'border-box', background: '#fff' }
 const labelStyle = { fontWeight: 600, marginTop: 16, marginBottom: 6, display: 'block', fontSize: 14 }
-const cardStyle = { border: '1px solid #e5e5e5', borderRadius: 12, padding: 16, marginTop: 20, background: '#fff' }
 const primaryBtn = (disabled) => ({
   width: '100%', marginTop: 16, padding: 14, background: disabled ? '#999' : '#2563eb',
   color: 'white', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 600,
   cursor: disabled ? 'not-allowed' : 'pointer',
 })
+
+// ---- date / time choices -------------------------------------------------
+// Native <input type="date"/"time"> draw their text in the visitor's browser
+// language (a Chinese browser shows 年/月/日), so the booking page uses plain
+// dropdowns with English labels instead. Values keep the same YYYY-MM-DD and
+// HH:mm shape the booking API already expects.
+const pad = (n) => String(n).padStart(2, '0')
+
+function buildDateOptions(days = 60) {
+  const out = []
+  const start = new Date()
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+    out.push({
+      value: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+    })
+  }
+  return out
+}
+
+function buildTimeOptions() {
+  const out = []
+  for (let mins = 8 * 60; mins <= 20 * 60; mins += 30) {
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    out.push({ value: `${pad(h)}:${pad(m)}`, label: `${((h + 11) % 12) + 1}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}` })
+  }
+  return out
+}
 
 // Same opt-in wording the booking form has always used — kept identical on
 // purpose so every place a number is collected shows one consistent consent.
@@ -31,12 +60,24 @@ function ConsentCheckbox({ biz, checked, onChange }) {
   )
 }
 
-// AI chat. The customer gives name + phone + consent first (they are texted
-// once the owner confirms), then chats.
-function ChatBox({ stylistId, biz }) {
+// Name / phone / consent are shared by both ways of booking, so switching
+// tabs never makes the customer type them again.
+function ContactFields({ biz, contact, setContact }) {
+  return (
+    <>
+      <label style={{ ...labelStyle, marginTop: 0 }}>Your name</label>
+      <input style={inputStyle} placeholder="Jane Smith" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />
+      <label style={labelStyle}>Phone number *</label>
+      <input style={inputStyle} type="tel" placeholder="(555) 123-4567" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} required />
+    </>
+  )
+}
+
+// AI chat. Name + phone + consent come from the shared fields above; the chat
+// starts once they're filled in.
+function ChatBox({ stylistId, biz, contact, setContact }) {
   const [sessionId] = useState(() => crypto.randomUUID())
   const [started, setStarted] = useState(false)
-  const [gate, setGate] = useState({ name: '', phone: '', agreed: false })
   const [gateError, setGateError] = useState('')
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -49,12 +90,12 @@ function ChatBox({ stylistId, biz }) {
 
   const startChat = (e) => {
     e.preventDefault()
-    const digits = gate.phone.replace(/[^\d]/g, '')
+    const digits = contact.phone.replace(/[^\d]/g, '')
     if (digits.length < 10 || digits.length > 15) { setGateError('Please enter a valid phone number.'); return }
-    if (!gate.agreed) { setGateError('Please check the box to agree to receive text messages.'); return }
+    if (!contact.agreed) { setGateError('Please check the box to agree to receive text messages.'); return }
     setGateError('')
     setStarted(true)
-    setMessages([{ role: 'assistant', text: `Hi${gate.name ? ` ${gate.name.split(' ')[0]}` : ''}! I can help you book at ${biz?.business_name || 'the salon'}. What service are you looking for, and when would you like to come?` }])
+    setMessages([{ role: 'assistant', text: `Hi${contact.name ? ` ${contact.name.split(' ')[0]}` : ''}! I can help you book at ${biz?.business_name || 'the salon'}. What service are you looking for, and when would you like to come?` }])
   }
 
   const send = async () => {
@@ -67,7 +108,7 @@ function ChatBox({ stylistId, biz }) {
       const res = await fetch(`/api/book/${stylistId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, message: text, name: gate.name, phone: gate.phone, agreed: gate.agreed }),
+        body: JSON.stringify({ sessionId, message: text, name: contact.name, phone: contact.phone, agreed: contact.agreed }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -83,140 +124,57 @@ function ChatBox({ stylistId, biz }) {
     setSending(false)
   }
 
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 17, margin: '0 0 4px' }}>💬 Book with our AI assistant</h2>
-      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Chat to find a time — {biz?.business_name || 'the salon'} confirms it{biz?.can_text ? ' and texts you' : ' and contacts you'}.</p>
-
-      {!started ? (
-        <form onSubmit={startChat}>
-          <label style={labelStyle}>Your name</label>
-          <input style={inputStyle} placeholder="Jane Smith" value={gate.name} onChange={(e) => setGate({ ...gate, name: e.target.value })} />
-          <label style={labelStyle}>Phone number *</label>
-          <input style={inputStyle} type="tel" placeholder="(555) 123-4567" value={gate.phone} onChange={(e) => setGate({ ...gate, phone: e.target.value })} required />
-          <ConsentCheckbox biz={biz} checked={gate.agreed} onChange={(v) => setGate({ ...gate, agreed: v })} />
-          {gateError && <p style={{ color: '#d93025', fontSize: 13, marginTop: 12 }}>{gateError}</p>}
-          <button type="submit" style={primaryBtn(false)}>Start chat</button>
-        </form>
-      ) : (
-        <>
-          <div style={{ height: 300, overflowY: 'auto', border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafafa', marginTop: 14 }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'customer' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
-                <div style={{
-                  maxWidth: '80%', padding: '8px 12px', borderRadius: 14, fontSize: 14, lineHeight: 1.4,
-                  background: m.role === 'customer' ? '#2563eb' : m.role === 'system' ? '#fef3c7' : 'white',
-                  color: m.role === 'customer' ? 'white' : m.role === 'system' ? '#92400e' : '#111',
-                  border: m.role === 'assistant' ? '1px solid #e5e5e5' : 'none',
-                }}>{m.text}</div>
-              </div>
-            ))}
-            {sending && <div style={{ color: '#999', fontSize: 13 }}>Typing...</div>}
-            <div ref={bottomRef} />
-          </div>
-          {requested && (
-            <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', borderRadius: 8, padding: '8px 12px', margin: '10px 0 0' }}>
-              ✅ Request sent. {biz?.business_name || 'The salon'} {biz?.can_text ? 'will text you once it\'s confirmed.' : 'will contact you to confirm.'}
-            </p>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <input
-              value={input}
-              maxLength={500}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
-              placeholder="Type a message..."
-              style={{ ...inputStyle, flex: 1, width: 'auto' }}
-              disabled={sending || unavailable}
-            />
-            <button onClick={send} disabled={sending || unavailable || !input.trim()}
-              style={{ padding: '0 18px', background: sending || !input.trim() ? '#ccc' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600 }}>
-              Send
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// Click-to-call, plus a pointer back to the chat if nobody picks up.
-function CallBlock({ biz, chatEnabled }) {
-  if (!biz?.contact_phone) return null
-  const dial = biz.contact_phone.replace(/[^\d+]/g, '')
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 17, margin: '0 0 8px' }}>📞 Prefer to call?</h2>
-      <a href={`tel:${dial}`} style={{
-        display: 'block', textAlign: 'center', padding: 12, borderRadius: 8, border: '1px solid #2563eb',
-        color: '#2563eb', fontWeight: 600, textDecoration: 'none', fontSize: 15,
-      }}>
-        Call {biz.business_name || 'us'} — {biz.contact_phone}
-      </a>
-      <p style={{ fontSize: 13, color: '#666', margin: '10px 0 0' }}>
-        No answer? {chatEnabled ? 'Book with the AI assistant above, ' : 'Fill in the booking form below, '}or leave your number below and we'll call you back.
-      </p>
-    </div>
-  )
-}
-
-// "Call me back" — no time picked, no text-message consent: the owner phones.
-function CallbackForm({ stylistId, biz }) {
-  const [open, setOpen] = useState(false)
-  const [f, setF] = useState({ name: '', phone: '', callWindow: '' })
-  const [sending, setSending] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setSending(true)
-    try {
-      const res = await fetch(`/api/book/${stylistId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'callback', ...f }),
-      })
-      const data = await res.json()
-      if (!res.ok) setError(data.error || 'Something went wrong. Please try again.')
-      else setDone(true)
-    } catch {
-      setError('Something went wrong. Please try again.')
-    }
-    setSending(false)
+  if (!started) {
+    return (
+      <form onSubmit={startChat}>
+        <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px' }}>
+          Chat to find a time — {biz?.business_name || 'the salon'} confirms it{biz?.can_text ? ' and texts you' : ' and contacts you'}.
+        </p>
+        <ContactFields biz={biz} contact={contact} setContact={setContact} />
+        <ConsentCheckbox biz={biz} checked={contact.agreed} onChange={(v) => setContact({ ...contact, agreed: v })} />
+        {gateError && <p style={{ color: '#d93025', fontSize: 13, marginTop: 12 }}>{gateError}</p>}
+        <button type="submit" style={primaryBtn(false)}>Start chat</button>
+      </form>
+    )
   }
 
   return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 17, margin: 0 }}>🔔 Request a call back</h2>
-      {done ? (
-        <p style={{ fontSize: 14, color: '#166534', marginBottom: 0 }}>
-          ✅ Got it{f.name ? `, ${f.name}` : ''}! {biz?.business_name || 'The salon'} will call you soon.
+    <>
+      <div style={{ height: 320, overflowY: 'auto', border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafafa' }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'customer' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+            <div style={{
+              maxWidth: '80%', padding: '8px 12px', borderRadius: 14, fontSize: 14, lineHeight: 1.4,
+              background: m.role === 'customer' ? '#2563eb' : m.role === 'system' ? '#fef3c7' : 'white',
+              color: m.role === 'customer' ? 'white' : m.role === 'system' ? '#92400e' : '#111',
+              border: m.role === 'assistant' ? '1px solid #e5e5e5' : 'none',
+            }}>{m.text}</div>
+          </div>
+        ))}
+        {sending && <div style={{ color: '#999', fontSize: 13 }}>Typing...</div>}
+        <div ref={bottomRef} />
+      </div>
+      {requested && (
+        <p style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', borderRadius: 8, padding: '8px 12px', margin: '10px 0 0' }}>
+          ✅ Request sent. {biz?.business_name || 'The salon'} {biz?.can_text ? "will text you once it's confirmed." : 'will contact you to confirm.'}
         </p>
-      ) : !open ? (
-        <>
-          <p style={{ fontSize: 13, color: '#666', margin: '6px 0 0' }}>Leave your number and {biz?.business_name || 'the salon'} will phone you to book.</p>
-          <button type="button" onClick={() => setOpen(true)} style={{ ...primaryBtn(false), marginTop: 12, background: 'white', color: '#2563eb', border: '1px solid #2563eb' }}>
-            Call me back
-          </button>
-        </>
-      ) : (
-        <form onSubmit={submit}>
-          <label style={labelStyle}>Your name</label>
-          <input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-          <label style={labelStyle}>Phone number *</label>
-          <input style={inputStyle} type="tel" placeholder="(555) 123-4567" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} required />
-          <label style={labelStyle}>Best time to call (optional)</label>
-          <input style={inputStyle} placeholder="e.g. weekdays after 5pm" value={f.callWindow} onChange={(e) => setF({ ...f, callWindow: e.target.value })} />
-          <p style={{ fontSize: 12, color: '#777', marginTop: 12 }}>
-            {biz?.business_name || 'The salon'} will call this number to arrange your appointment.
-          </p>
-          {error && <p style={{ color: '#d93025', fontSize: 13 }}>{error}</p>}
-          <button type="submit" disabled={sending} style={primaryBtn(sending)}>{sending ? 'Sending...' : 'Send'}</button>
-        </form>
       )}
-    </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <input
+          value={input}
+          maxLength={500}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && send()}
+          placeholder="Type a message..."
+          style={{ ...inputStyle, flex: 1, width: 'auto' }}
+          disabled={sending || unavailable}
+        />
+        <button onClick={send} disabled={sending || unavailable || !input.trim()}
+          style={{ padding: '0 18px', background: sending || !input.trim() ? '#ccc' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600 }}>
+          Send
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -226,11 +184,18 @@ export default function PublicBookingPage() {
   const [biz, setBiz] = useState(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [mode, setMode] = useState('chat') // 'chat' | 'form'
 
-  const [form, setForm] = useState({ name: '', phone: '', service: '', message: '', date: '', time: '', duration: 60, agreed: false })
+  // shared by both modes
+  const [contact, setContact] = useState({ name: '', phone: '', agreed: false })
+  // form-only
+  const [form, setForm] = useState({ service: '', message: '', date: '', time: '', duration: 60 })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
+
+  const dateOptions = useMemo(() => buildDateOptions(), [])
+  const timeOptions = useMemo(() => buildTimeOptions(), [])
 
   useEffect(() => {
     if (!stylistId) return
@@ -247,7 +212,7 @@ export default function PublicBookingPage() {
     e.preventDefault()
     setError('')
 
-    if (!form.phone.trim()) {
+    if (!contact.phone.trim()) {
       setError('Please enter your phone number.')
       return
     }
@@ -255,7 +220,7 @@ export default function PublicBookingPage() {
       setError('Please choose a preferred date and time.')
       return
     }
-    if (!form.agreed) {
+    if (!contact.agreed) {
       setError('Please check the box to agree to receive text messages.')
       return
     }
@@ -265,7 +230,7 @@ export default function PublicBookingPage() {
       const res = await fetch(`/api/book/${stylistId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, name: contact.name, phone: contact.phone, agreed: contact.agreed }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -279,9 +244,6 @@ export default function PublicBookingPage() {
     }
     setSubmitting(false)
   }
-
-  const input = inputStyle
-  const label = labelStyle
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading...</div>
@@ -301,20 +263,38 @@ export default function PublicBookingPage() {
         <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
         <h1 style={{ fontSize: 22, marginBottom: 8 }}>Request received!</h1>
         <p style={{ color: '#666', fontSize: 15 }}>
-          Thanks{form.name ? `, ${form.name}` : ''}! {biz?.business_name || 'We'} {biz?.can_text ? 'will text you' : 'will contact you'} shortly to confirm
+          Thanks{contact.name ? `, ${contact.name}` : ''}! {biz?.business_name || 'We'} {biz?.can_text ? 'will text you' : 'will contact you'} shortly to confirm
           {form.date && form.time ? ' your requested time' : ''}.
         </p>
       </div>
     )
   }
 
+  const chatEnabled = !!biz?.chat_enabled
+  // The salon's address is often saved with a trailing comma.
+  const address = (biz?.address || '').replace(/[,\s]+$/, '')
+  const dial = (biz?.contact_phone || '').replace(/[^\d+]/g, '')
+  const showForm = !chatEnabled || mode === 'form'
+  const showChat = chatEnabled && mode === 'chat'
+
+  const tabStyle = (active) => ({
+    flex: 1, padding: '10px 8px', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+    background: active ? '#fff' : 'transparent', color: active ? '#111' : '#666',
+    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+  })
+
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '40px 24px' }}>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{biz?.business_name || 'Book an appointment'}</h1>
-      {biz?.address && <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>{biz.address}</p>}
-      <p style={{ color: '#666', fontSize: 15, marginTop: 16 }}>
-        Book online, or call us. {biz?.can_text ? "We'll text you once your time is confirmed." : "We'll contact you once your time is confirmed."}
-      </p>
+      {(address || biz?.contact_phone) && (
+        <p style={{ color: '#666', fontSize: 14, marginTop: 0, marginBottom: 0 }}>
+          {address && <span>📍 {address}</span>}
+          {address && biz?.contact_phone && <span> · </span>}
+          {biz?.contact_phone && (
+            <a href={`tel:${dial}`} style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>📞 {biz.contact_phone}</a>
+          )}
+        </p>
+      )}
 
       {biz?.services?.length > 0 && (
         <div style={{ margin: '16px 0', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -326,99 +306,78 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {biz?.chat_enabled && <ChatBox stylistId={stylistId} biz={biz} />}
-      <CallBlock biz={biz} chatEnabled={!!biz?.chat_enabled} />
-      <CallbackForm stylistId={stylistId} biz={biz} />
-
-      <h2 style={{ fontSize: 17, margin: '32px 0 0' }}>📝 Or request a time with the form</h2>
-      <form onSubmit={handleSubmit} style={{ marginTop: 4 }}>
-        <label style={label}>Your name</label>
-        <input
-          style={input}
-          placeholder="Jane Smith"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-
-        <label style={label}>Phone number *</label>
-        <input
-          style={input}
-          type="tel"
-          placeholder="(555) 123-4567"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          required
-        />
-
-        <label style={label}>What are you looking for?</label>
-        <input
-          style={input}
-          placeholder="e.g. Haircut, Color, Balayage"
-          value={form.service}
-          onChange={(e) => setForm({ ...form, service: e.target.value })}
-        />
-
-        <label style={label}>When would you like to come?</label>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <input
-              style={input}
-              type="date"
-              value={form.date}
-              min={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              required
-            />
-            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Preferred date</div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <input
-              style={input}
-              type="time"
-              value={form.time}
-              onChange={(e) => setForm({ ...form, time: e.target.value })}
-              required
-            />
-            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Preferred time</div>
-          </div>
+      {chatEnabled && (
+        <div style={{ display: 'flex', gap: 4, background: '#f1f1f1', borderRadius: 10, padding: 4, marginTop: 8 }}>
+          <button type="button" style={tabStyle(mode === 'chat')} onClick={() => setMode('chat')}>💬 Chat with AI</button>
+          <button type="button" style={tabStyle(mode === 'form')} onClick={() => setMode('form')}>📝 Quick form</button>
         </div>
+      )}
 
-        <label style={label}>Appointment length</label>
-        <select
-          style={input}
-          value={form.duration}
-          onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })}
-        >
-          <option value={30}>30 minutes</option>
-          <option value={60}>60 minutes</option>
-          <option value={90}>90 minutes</option>
-          <option value={120}>120 minutes</option>
-        </select>
+      <div style={{ marginTop: 18 }}>
+        {/* Kept mounted (just hidden) so an ongoing chat isn't lost when someone peeks at the form. */}
+        {chatEnabled && (
+          <div style={{ display: showChat ? 'block' : 'none' }}>
+            <ChatBox stylistId={stylistId} biz={biz} contact={contact} setContact={setContact} />
+          </div>
+        )}
 
-        <label style={label}>Anything else we should know? (optional)</label>
-        <textarea
-          style={{ ...input, height: 70, resize: 'vertical' }}
-          placeholder="Preferred day/time, any details..."
-          value={form.message}
-          onChange={(e) => setForm({ ...form, message: e.target.value })}
-        />
+        {showForm && (
+          <form onSubmit={handleSubmit}>
+            <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px' }}>
+              Request a time — {biz?.business_name || 'the salon'} confirms it{biz?.can_text ? ' and texts you' : ' and contacts you'}.
+            </p>
+            <ContactFields biz={biz} contact={contact} setContact={setContact} />
 
-        <ConsentCheckbox biz={biz} checked={form.agreed} onChange={(v) => setForm({ ...form, agreed: v })} />
+            <label style={labelStyle}>What are you looking for?</label>
+            <input
+              style={inputStyle}
+              placeholder="e.g. Haircut, Color, Balayage"
+              value={form.service}
+              onChange={(e) => setForm({ ...form, service: e.target.value })}
+            />
 
-        {error && <p style={{ color: '#d93025', fontSize: 13, marginTop: 12 }}>{error}</p>}
+            <label style={labelStyle}>When would you like to come?</label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <select style={{ ...inputStyle, flex: 1.2 }} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required aria-label="Preferred date">
+                <option value="">Choose a date</option>
+                {dateOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select style={{ ...inputStyle, flex: 1 }} value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required aria-label="Preferred time">
+                <option value="">Choose a time</option>
+                {timeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            width: '100%', marginTop: 20, padding: 14, background: submitting ? '#999' : '#2563eb',
-            color: 'white', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 600,
-            cursor: submitting ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {submitting ? 'Sending...' : 'Book Now'}
-        </button>
-      </form>
+            <label style={labelStyle}>Appointment length</label>
+            <select
+              style={inputStyle}
+              value={form.duration}
+              onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })}
+            >
+              <option value={30}>30 minutes</option>
+              <option value={60}>60 minutes</option>
+              <option value={90}>90 minutes</option>
+              <option value={120}>120 minutes</option>
+            </select>
+
+            <label style={labelStyle}>Anything else we should know? (optional)</label>
+            <textarea
+              style={{ ...inputStyle, height: 70, resize: 'vertical' }}
+              placeholder="Preferred day/time, any details..."
+              value={form.message}
+              onChange={(e) => setForm({ ...form, message: e.target.value })}
+            />
+
+            <ConsentCheckbox biz={biz} checked={contact.agreed} onChange={(v) => setContact({ ...contact, agreed: v })} />
+
+            {error && <p style={{ color: '#d93025', fontSize: 13, marginTop: 12 }}>{error}</p>}
+
+            <button type="submit" disabled={submitting} style={{ ...primaryBtn(submitting), marginTop: 20 }}>
+              {submitting ? 'Sending...' : 'Book Now'}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   )
 }
