@@ -8,6 +8,8 @@ function HomeContent() {
   const [session, setSession] = useState<any>(undefined)
   const [stylist, setStylist] = useState<any>(null)
   const [calendarMsg, setCalendarMsg] = useState('')
+  // true once we know this owner hasn't saved their salon details yet
+  const [needsSetup, setNeedsSetup] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -20,7 +22,22 @@ function HomeContent() {
           .select('*')
           .eq('auth_user_id', session.user.id)
           .maybeSingle()
-          .then(({ data }) => setStylist(data))
+          .then(async ({ data }) => {
+            setStylist(data)
+            if (!data) return
+            // New owner with no salon details yet -> first-run setup wizard.
+            // "Skip for now" is remembered per browser so it only nags once.
+            const { data: biz } = await supabase
+              .from('business_settings')
+              .select('business_name')
+              .eq('stylist_id', data.id)
+              .maybeSingle()
+            const incomplete = !biz?.business_name
+            setNeedsSetup(incomplete)
+            let skipped = false
+            try { skipped = !!localStorage.getItem('onboarding_skipped') } catch {}
+            if (incomplete && !skipped && !searchParams.get('calendar')) router.replace('/onboarding')
+          })
       }
     })
   }
@@ -37,6 +54,14 @@ function HomeContent() {
       no_refresh_token: '⚠️ No valid authorization received. Please reconnect (if you\'ve authorized before, revoke access in your Google account permissions and try again).',
       save_failed: '❌ Failed to save authorization. Please try again or contact support.',
       error: '❌ Connection failed. Please try again.',
+    }
+    // Came back from Google while in the setup wizard -> return to it.
+    let resumeWizard = false
+    try { resumeWizard = !!calendarStatus && !!localStorage.getItem('onboarding_resume') } catch {}
+    if (resumeWizard) {
+      try { localStorage.removeItem('onboarding_resume') } catch {}
+      router.replace(`/onboarding?step=4&calendar=${encodeURIComponent(calendarStatus as string)}`)
+      return
     }
     if (calendarStatus && messages[calendarStatus]) {
       setCalendarMsg(messages[calendarStatus])
@@ -126,6 +151,12 @@ function HomeContent() {
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">Veloceia</h1>
             <p className="text-sm text-gray-500 mt-2">Smart Hairdresser Formula & SMS Assistant</p>
           </header>
+
+          {needsSetup && (
+            <Link href="/onboarding" className="mb-6 block rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-sm font-medium text-amber-900">
+              👋 Finish setting up your salon — takes about 2 minutes →
+            </Link>
+          )}
 
           {calendarMsg && (
             <div className="mb-6 rounded-xl bg-blue-50 text-blue-700 text-sm p-3 text-center">
