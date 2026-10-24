@@ -105,9 +105,12 @@ function OnboardingContent() {
     window.scrollTo({ top: 0 })
   }
 
-  const skipForNow = () => {
-    try { localStorage.setItem(SKIPPED_KEY, '1') } catch {}
-    router.push('/')
+  // No "skip" for the wizard: the first steps are what make the booking page
+  // usable. This is only an escape hatch so nobody is ever trapped here
+  // (e.g. a save keeps failing, or they signed in with the wrong account).
+  const logOut = async () => {
+    await supabase.auth.signOut()
+    router.replace('/login')
   }
 
   // --- step 1: save ---
@@ -188,10 +191,8 @@ function OnboardingContent() {
           {step > 1 ? (
             <button onClick={() => goTo(step - 1)} className="text-[13px] font-medium text-mute hover:text-ink">← Back</button>
           ) : <span />}
-          <span className="text-[13px] text-mute">Step {step} of 4 · {STEP_TITLES[step - 1]}</span>
-          {step < 4 ? (
-            <button onClick={skipForNow} className="text-[13px] font-medium text-mute hover:text-ink">Skip for now</button>
-          ) : <span />}
+          <span key={step} className="text-[13px] text-mute">Step {step} of 4 · {STEP_TITLES[step - 1]}</span>
+          <button onClick={logOut} className="text-[12px] text-mute/80 hover:text-ink">Log out</button>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5">
           {[1, 2, 3, 4].map(n => (
@@ -199,7 +200,7 @@ function OnboardingContent() {
           ))}
         </div>
 
-        <div className="mt-8">
+        <div key={step} className="mt-8">
           {step === 1 && (
             <DetailsStep
               form={form} setForm={setForm} services={services}
