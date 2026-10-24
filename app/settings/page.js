@@ -29,6 +29,34 @@ function utcToZonedParts(iso, timeZone) {
   return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` }
 }
 
+// Date / time choices for "Manually add appointment". Native date and time
+// inputs show 年/月/日 in a Chinese browser, so these are plain dropdowns with
+// English labels. Values keep the YYYY-MM-DD / HH:mm shape the API expects.
+const pad2 = (n) => String(n).padStart(2, '0')
+function buildDateOptions(days = 120) {
+  const out = []
+  const start = new Date()
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+    out.push({
+      value: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+      label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+    })
+  }
+  return out
+}
+function buildTimeOptions() {
+  const out = []
+  for (let mins = 7 * 60; mins <= 21 * 60; mins += 15) {
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    out.push({ value: `${pad2(h)}:${pad2(m)}`, label: `${((h + 11) % 12) + 1}:${pad2(m)} ${h < 12 ? 'AM' : 'PM'}` })
+  }
+  return out
+}
+const APPT_DATE_OPTIONS = buildDateOptions()
+const APPT_TIME_OPTIONS = buildTimeOptions()
+
 const TABS = [
   { id: 'details', label: 'Salon Details', dot: 'bg-oxblood' },
   { id: 'connections', label: 'Connections', dot: 'bg-sage' },
@@ -68,7 +96,7 @@ function SettingsContent() {
   const [loadingCalendar, setLoadingCalendar] = useState(false)
   const [calendarError, setCalendarError] = useState('')
 
-  const [apptForm, setApptForm] = useState({ clientName: '', date: '', time: '', duration: 60, service: '', notes: '' })
+  const [apptForm, setApptForm] = useState({ clientName: '', phone: '', date: '', time: '', duration: 60, service: '', notes: '' })
   const [apptStatus, setApptStatus] = useState('')
 
   const [pendingRequests, setPendingRequests] = useState([])
@@ -207,32 +235,35 @@ function SettingsContent() {
     }
   }
 
-  const handleAddAppointment = async () => {
+  // Appointments the owner books themselves (a customer phoned or walked in).
+  // The server reads the time in the salon's time zone, checks the calendar for
+  // an overlap, and saves the customer to the client list if a phone is given.
+  const handleAddAppointment = async (overrideConflict = false) => {
     setApptStatus('Submitting...')
-    if (!apptForm.date || !apptForm.time) { setApptStatus('Please fill in the date and time'); return }
+    if (!apptForm.date || !apptForm.time) { setApptStatus('Please choose a date and time.'); return }
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { setApptStatus('Please log in first'); return }
+      if (!session) { setApptStatus('Please log in first.'); return }
 
-      const startLocal = new Date(`${apptForm.date}T${apptForm.time}:00`)
-      const endLocal = new Date(startLocal.getTime() + Number(apptForm.duration) * 60000)
-
-      const res = await fetch('/api/calendar/create', {
+      const res = await fetch('/api/appointments/manual', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          summary: `Appointment: ${apptForm.service || 'Service'} - ${apptForm.clientName || 'Client'}`,
-          description: apptForm.notes,
-          startISO: startLocal.toISOString(),
-          endISO: endLocal.toISOString(),
-          timeZone: form.timezone,
-        }),
+        body: JSON.stringify({ ...apptForm, duration: Number(apptForm.duration) || 60, overrideConflict }),
       })
       const data = await res.json()
+
+      if (res.status === 409 && data.hasConflict) {
+        if (window.confirm('This time overlaps with an existing appointment on your calendar. Add it anyway?')) {
+          return handleAddAppointment(true)
+        }
+        setApptStatus('Not added — pick another time.')
+        return
+      }
       if (!res.ok || data.error) { setApptStatus('❌ ' + (data.error || 'Failed to add')); return }
-      setApptStatus('✅ Added to calendar')
-      setApptForm({ clientName: '', date: '', time: '', duration: 60, service: '', notes: '' })
+
+      setApptStatus(data.savedClient ? '✅ Added to your calendar and saved to your client list.' : '✅ Added to your calendar.')
+      setApptForm({ clientName: '', phone: '', date: '', time: '', duration: 60, service: '', notes: '' })
     } catch (err) {
       setApptStatus('❌ Network error')
     }
@@ -595,19 +626,26 @@ function SettingsContent() {
 
               <div className={card}>
                 <h3 className={`${sectionTitle} mb-1`}>📞 Manually add appointment</h3>
-                <p className={`${helper} mb-3.5`}>For existing clients who call or book in person.</p>
+                <p className={`${helper} mb-3.5`}>For customers who phone or walk in. Add their number to save them to your client list.</p>
                 <div className="space-y-3">
                   <input className={input} placeholder="Client name" value={apptForm.clientName} onChange={e => setApptForm({ ...apptForm, clientName: e.target.value })} />
+                  <input className={input} type="tel" placeholder="Phone number (optional)" value={apptForm.phone} onChange={e => setApptForm({ ...apptForm, phone: e.target.value })} />
                   <div className="flex gap-2">
-                    <input className={input} type="date" value={apptForm.date} onChange={e => setApptForm({ ...apptForm, date: e.target.value })} />
-                    <input className={input} type="time" value={apptForm.time} onChange={e => setApptForm({ ...apptForm, time: e.target.value })} />
+                    <select className={input} value={apptForm.date} onChange={e => setApptForm({ ...apptForm, date: e.target.value })} aria-label="Date">
+                      <option value="">Choose a date</option>
+                      {APPT_DATE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <select className={input} value={apptForm.time} onChange={e => setApptForm({ ...apptForm, time: e.target.value })} aria-label="Time">
+                      <option value="">Choose a time</option>
+                      {APPT_TIME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
                   </div>
                   <div className="flex gap-2">
                     <input className={input} placeholder="Service" value={apptForm.service} onChange={e => setApptForm({ ...apptForm, service: e.target.value })} />
                     <input className={`${input} w-28 shrink-0`} type="number" placeholder="Min" value={apptForm.duration} onChange={e => setApptForm({ ...apptForm, duration: e.target.value })} />
                   </div>
                   <textarea className={`${input} h-16`} placeholder="Notes (optional)" value={apptForm.notes} onChange={e => setApptForm({ ...apptForm, notes: e.target.value })} />
-                  <button onClick={handleAddAppointment} className={`${primaryBtn} w-full`}>Add to Calendar</button>
+                  <button onClick={() => handleAddAppointment()} className={`${primaryBtn} w-full`}>Add to Calendar</button>
                   {apptStatus && <p className={`${helper} text-center`}>{apptStatus}</p>}
                 </div>
               </div>
