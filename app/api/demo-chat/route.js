@@ -6,6 +6,13 @@ import { generateAssistantReply } from '@/lib/ai-reply'
 export const dynamic = 'force-dynamic'
 const CHANNEL = 'demo'
 
+// The first-run setup wizard lets a new owner try their AI. Those practice
+// messages get their own small allowance (counted by the messages already
+// logged) and never touch sms_used — otherwise a free account's few customer
+// messages would be gone before the first customer arrived.
+const WIZARD_LIMIT = 6
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Requires the stylist to be logged in — this is a back-office tool for the
 // business owner to test their own AI setup, not a public endpoint.
 //
@@ -39,8 +46,15 @@ export async function POST(req) {
   }
 
   const { sessionId, message } = body
+  const isWizard = body.wizard === true
   if (!sessionId || !message?.trim()) {
     return Response.json({ error: 'Missing sessionId or message' }, { status: 400 })
+  }
+  if (isWizard && !UUID_RE.test(String(sessionId))) {
+    return Response.json({ error: 'Invalid request' }, { status: 400 })
+  }
+  if (message.length > 500) {
+    return Response.json({ error: 'Please keep messages under 500 characters.' }, { status: 400 })
   }
 
   // Always resolve the stylist from the authenticated session — never from
@@ -56,7 +70,18 @@ export async function POST(req) {
   // Demo messages spend the SAME trial quota as real SMS — this IS the "3
   // free tries" a trial account gets, just without needing a real phone
   // number to deliver them through.
-  if (isQuotaExceeded(stylist, 'sms')) {
+  let wizardUsed = 0
+  if (isWizard) {
+    const { count } = await supabaseAdmin.from('messages').select('id', { count: 'exact', head: true })
+      .eq('stylist_id', stylistId).eq('channel', CHANNEL).eq('direction', 'inbound').like('phone_number', 'demo-wizard-%')
+    wizardUsed = count || 0
+    if (wizardUsed >= WIZARD_LIMIT) {
+      return Response.json({
+        error: 'wizard_limit',
+        message: "You've used your practice messages. Your customers' messages are not affected — you can keep testing from Settings.",
+      }, { status: 402 })
+    }
+  } else if (isQuotaExceeded(stylist, 'sms')) {
     return Response.json({
       error: 'quota_exceeded',
       message: "You've used all your free demo messages. Upgrade to a paid plan to keep testing and get your own dedicated number.",
@@ -67,7 +92,7 @@ export async function POST(req) {
 
   // contactId is scoped to this demo session only — never a real phone
   // number — so it never collides with a real customer's message history.
-  const contactId = `demo-${sessionId}`
+  const contactId = isWizard ? `demo-wizard-${sessionId}` : `demo-${sessionId}`
 
   await supabaseAdmin.from('messages').insert({
     stylist_id: stylistId, phone_number: contactId, channel: CHANNEL, direction: 'inbound', body: message.trim(),
@@ -81,6 +106,10 @@ export async function POST(req) {
   await supabaseAdmin.from('messages').insert({
     stylist_id: stylistId, phone_number: contactId, channel: CHANNEL, direction: 'outbound', body: reply,
   })
+
+  if (isWizard) {
+    return Response.json({ reply, remaining: Math.max(0, WIZARD_LIMIT - wizardUsed - 1) })
+  }
 
   const newUsed = (stylist.sms_used || 0) + 1
   await supabaseAdmin.from('stylists').update({ sms_used: newUsed }).eq('id', stylistId)
