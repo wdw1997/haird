@@ -65,9 +65,9 @@ function ConsentCheckbox({ biz, checked, onChange }) {
         Appointment confirmations and updates from {biz?.business_name || 'this business'}, sent via {SMS_BRAND} (operated by
         Xinwei (Tongxiang) E-Commerce Co., Ltd.). Message frequency varies. Message and data rates may apply.
         Reply STOP to opt out, HELP for help. View our{' '}
-        <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>{' '}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'underline' }}>Privacy Policy</a>{' '}
         and{' '}
-        <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>.
+        <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'underline' }}>Terms of Service</a>.
       </p>
     </div>
   )
