@@ -17,6 +17,13 @@ const primaryBtn = (disabled) => ({
 // HH:mm shape the booking API already expects.
 const pad = (n) => String(n).padStart(2, '0')
 
+// US / Canada numbers only. Mirrors lib/phone.js (the server re-checks).
+function isValidUsPhone(input) {
+  let digits = String(input || '').replace(/[^\d]/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1)
+  return /^[2-9]\d{2}[2-9]\d{6}$/.test(digits)
+}
+
 function buildDateOptions(days = 60) {
   const out = []
   const start = new Date()
@@ -40,23 +47,29 @@ function buildTimeOptions() {
   return out
 }
 
-// Same opt-in wording the booking form has always used — kept identical on
-// purpose so every place a number is collected shows one consistent consent.
+// Opt-in. The first line is the exact sentence the carrier registration
+// requires (notification messages, naming the brand) and stays on its own
+// line; the required disclosures sit underneath in smaller type.
+const SMS_BRAND = 'Veloceia'
+
 function ConsentCheckbox({ biz, checked, onChange }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 18, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 2 }} required />
-      <span>
-        By checking this box, I agree to receive appointment updates and customer
-        support text messages from {biz?.business_name || 'this business'} via
-        Veloceia (operated by Xinwei (Tongxiang) E-Commerce Co., Ltd.).
-        Message frequency varies. Message and data rates may apply. Reply STOP to opt
-        out, HELP for help. View our{' '}
+    <div style={{ marginTop: 18 }}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 3 }} required />
+        <span style={{ fontSize: 14, color: '#222', fontWeight: 500 }}>
+          I agree to receive notification text message from {SMS_BRAND}.
+        </span>
+      </label>
+      <p style={{ fontSize: 12, color: '#777', margin: '8px 0 0 24px', lineHeight: 1.5 }}>
+        Appointment confirmations and updates from {biz?.business_name || 'this business'}, sent via {SMS_BRAND} (operated by
+        Xinwei (Tongxiang) E-Commerce Co., Ltd.). Message frequency varies. Message and data rates may apply.
+        Reply STOP to opt out, HELP for help. View our{' '}
         <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>{' '}
         and{' '}
         <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>.
-      </span>
-    </label>
+      </p>
+    </div>
   )
 }
 
@@ -68,7 +81,10 @@ function ContactFields({ biz, contact, setContact }) {
       <label style={{ ...labelStyle, marginTop: 0 }}>Your name</label>
       <input style={inputStyle} placeholder="Jane Smith" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />
       <label style={labelStyle}>Phone number *</label>
-      <input style={inputStyle} type="tel" placeholder="(555) 123-4567" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} required />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ ...inputStyle, width: 64, flex: 'none', textAlign: 'center', background: '#f5f5f5', color: '#444', fontWeight: 600 }} aria-label="Country code">+1</div>
+        <input style={{ ...inputStyle, flex: 1, width: 'auto' }} type="tel" inputMode="tel" autoComplete="tel-national" placeholder="(555) 123-4567" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} required />
+      </div>
     </>
   )
 }
@@ -90,8 +106,7 @@ function ChatBox({ stylistId, biz, contact, setContact }) {
 
   const startChat = (e) => {
     e.preventDefault()
-    const digits = contact.phone.replace(/[^\d]/g, '')
-    if (digits.length < 10 || digits.length > 15) { setGateError('Please enter a valid phone number.'); return }
+    if (!isValidUsPhone(contact.phone)) { setGateError('Please enter a valid US phone number.'); return }
     if (!contact.agreed) { setGateError('Please check the box to agree to receive text messages.'); return }
     setGateError('')
     setStarted(true)
@@ -212,8 +227,8 @@ export default function PublicBookingPage() {
     e.preventDefault()
     setError('')
 
-    if (!contact.phone.trim()) {
-      setError('Please enter your phone number.')
+    if (!isValidUsPhone(contact.phone)) {
+      setError('Please enter a valid US phone number.')
       return
     }
     if (!form.date || !form.time) {
@@ -285,6 +300,7 @@ export default function PublicBookingPage() {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.03em', color: '#111', marginBottom: 14 }}>Veloceia.</div>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{biz?.business_name || 'Book an appointment'}</h1>
       {(address || biz?.contact_phone) && (
         <p style={{ color: '#666', fontSize: 14, marginTop: 0, marginBottom: 0 }}>
