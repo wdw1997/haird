@@ -2,30 +2,26 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { sendEmail } from '@/lib/resend-client'
 import { zonedTimeToUtcISO } from '@/lib/google-calendar'
 import { isWebChatEnabled } from '@/lib/web-chat'
+import { normalizeUsPhone } from '@/lib/phone'
 
 export const dynamic = 'force-dynamic'
 
 // Only these fields are safe to expose on a public, unauthenticated page.
 // Never return stylist.email, twilio_number, tokens, etc. here.
-function publicBusinessView(biz, stylistName, chatEnabled) {
+function publicBusinessView(biz, stylistName, chatEnabled, canText) {
   return {
     business_name: biz?.business_name || stylistName || 'Book an appointment',
     address: biz?.address || null,
     contact_phone: biz?.contact_phone || null,
     services: Array.isArray(biz?.services) ? biz.services : [],
     chat_enabled: chatEnabled,
+    // Only true once the salon has its own number; free trials can't send texts yet.
+    can_text: canText,
   }
 }
 
 function escapeHtml(v) {
   return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-}
-
-// Very light phone validation — just enough to reject obvious junk.
-// Real formatting/validation happens once it's a real conversation.
-function isPlausiblePhone(phone) {
-  const digits = (phone || '').replace(/[^\d]/g, '')
-  return digits.length >= 10 && digits.length <= 15
 }
 
 export async function GET(req, { params }) {
@@ -41,7 +37,7 @@ export async function GET(req, { params }) {
   const { data: biz } = await supabaseAdmin
     .from('business_settings').select('*').eq('stylist_id', stylistId).maybeSingle()
 
-  return Response.json(publicBusinessView(biz, stylist.name, isWebChatEnabled(stylist)))
+  return Response.json(publicBusinessView(biz, stylist.name, isWebChatEnabled(stylist), !!stylist.twilio_number))
 }
 
 export async function POST(req, { params }) {
@@ -70,8 +66,10 @@ export async function POST(req, { params }) {
   const durationMin = Number(body.duration) || 60
   const agreed = body.agreed === true
 
-  if (!isPlausiblePhone(phone)) {
-    return Response.json({ error: 'Please enter a valid phone number.' }, { status: 400 })
+  // US / Canada numbers only — that's what the text-message registration covers.
+  const normalizedPhone = normalizeUsPhone(phone)
+  if (!normalizedPhone) {
+    return Response.json({ error: 'Please enter a valid US phone number.' }, { status: 400 })
   }
   if (!isCallback) {
     // The customer picks a preferred time up front now, instead of leaving
@@ -94,10 +92,8 @@ export async function POST(req, { params }) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Normalize to E.164-ish so this lines up with how numbers arrive via SMS
-  // (from Twilio/Telnyx) and can be matched against the same clients row later.
-  const digits = phone.replace(/[^\d]/g, '')
-  const normalizedPhone = digits.length === 10 ? `+1${digits}` : `+${digits}`
+  // normalizedPhone (E.164) lines up with how numbers arrive via SMS, so it can
+  // be matched against the same clients row later.
 
   // Basic abuse protection for a public endpoint: each request emails the
   // owner, so cap how many one number / one page can create per hour.
