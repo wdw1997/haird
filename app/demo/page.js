@@ -74,7 +74,7 @@ export default function DemoChatPage() {
         <Link href="/settings" style={{ fontSize: 13, color: '#666', textDecoration: 'none' }}>← Back to Settings</Link>
         <h1 style={{ fontSize: 22, margin: '8px 0 4px' }}>💬 Try Your AI Assistant</h1>
         <p style={{ fontSize: 13, color: '#666', margin: 0 }}>
-          Pretend you're a customer texting in. This uses the exact same AI logic as your real SMS/Instagram line — no real number needed.
+          Pretend you're a customer chatting with your AI. This uses the same AI as the chat on your booking page — no real number needed.
           {remaining !== null && !quotaExceeded && <span> ({remaining} free {remaining === 1 ? 'message' : 'messages'} left)</span>}
         </p>
       </div>
