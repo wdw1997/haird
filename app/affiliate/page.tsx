@@ -11,7 +11,7 @@ const REASONS = [
   },
   {
     title: 'Nothing for them to configure',
-    body: 'Calendar sync, SMS, and Instagram DMs all work out of the box. Your referral is live in minutes, not after a support call.',
+    body: 'Calendar sync, a booking-page AI chat, and appointment texts all work out of the box. Your referral is live in minutes, not after a support call.',
   },
   {
     title: 'Free to try before they pay',
@@ -39,7 +39,7 @@ const FAQS = [
   },
   {
     q: 'What is Veloceia?',
-    a: "Veloceia is an AI front desk for salons: it records client formulas by voice, replies to booking texts and Instagram DMs automatically, and syncs confirmed appointments straight to Google Calendar.",
+    a: "Veloceia is an AI front desk for salons: it records client formulas by voice, answers booking questions with an AI chat on your booking page, texts clients once you confirm an appointment, and syncs confirmed appointments straight to Google Calendar.",
   },
   {
     q: 'How does it work?',
