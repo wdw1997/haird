@@ -77,7 +77,6 @@ function SettingsContent() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState('details')
   const [stylistId, setStylistId] = useState(null)
-  const [instagramMsg, setInstagramMsg] = useState('')
   const [form, setForm] = useState({
     business_name: '', address: '', contact_phone: '',
     business_hours_text: '', services_text: '',
@@ -157,26 +156,6 @@ function SettingsContent() {
       setManualTimes(initialManual)
     })()
   }, [])
-
-  useEffect(() => {
-    const igStatus = searchParams.get('instagram')
-    const messages = {
-      connected: '✅ Instagram connected successfully',
-      cancelled: 'Authorization cancelled',
-      save_failed: '❌ Failed to save Instagram authorization. Please try again.',
-      error: '❌ Instagram connection failed. Please try again.',
-    }
-    if (igStatus && messages[igStatus]) setInstagramMsg(messages[igStatus])
-  }, [searchParams])
-
-  const handleConnectInstagram = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    const res = await fetch('/api/instagram/auth', { headers: { Authorization: `Bearer ${session.access_token}` } })
-    const data = await res.json()
-    if (data.url) window.location.href = data.url
-    else alert(data.error || 'Connection failed')
-  }
 
   const handleConnectGoogle = async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -596,13 +575,6 @@ function SettingsContent() {
                 ) : (
                   <button onClick={handleConnectGoogle} className={primaryBtn}>Connect Google Calendar</button>
                 )}
-              </div>
-
-              <div className={card}>
-                <h3 className={`${sectionTitle} mb-1`}>📷 Instagram DM</h3>
-                <p className={`${helper} mb-3.5`}>Let the AI assistant reply to Instagram DMs the same way it replies to texts.</p>
-                {instagramMsg && <p className="mb-3 text-[13px] text-ink">{instagramMsg}</p>}
-                <button onClick={handleConnectInstagram} className={primaryBtn}>Connect Instagram</button>
               </div>
             </div>
           )}
