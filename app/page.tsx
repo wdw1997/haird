@@ -339,7 +339,7 @@ function HomeContent() {
           <div className="rounded-2xl border border-zinc-100 p-8">
             <h3 className="font-bold text-lg text-zinc-900 mb-2">AI Replies While You Cut</h3>
             <p className="text-zinc-500 text-sm leading-relaxed mb-6">
-              Booking questions land as a text or Instagram DM. Your AI assistant checks your rules and answers in seconds, in your voice.
+              Booking questions come in through the AI chat on your booking page. Your AI assistant checks your rules and answers in seconds, in your voice.
             </p>
             <div className="rounded-xl bg-zinc-50 p-4">
               <div className="flex justify-between items-center mb-3">
@@ -362,7 +362,7 @@ function HomeContent() {
           <div className="rounded-2xl border border-zinc-100 p-8">
             <h3 className="font-bold text-lg text-zinc-900 mb-2">Every Conversation, One Inbox</h3>
             <p className="text-zinc-500 text-sm leading-relaxed mb-6">
-              SMS and Instagram DMs land in the same place as formulas and booking history — nothing lives in three different apps.
+              Web chats and booking requests land in the same place as formulas and booking history — nothing lives in three different apps.
             </p>
             <div className="rounded-xl bg-zinc-50 p-4">
               <div className="text-xs font-semibold text-zinc-700 mb-3">Sarah M.</div>
@@ -425,21 +425,21 @@ function HomeContent() {
           </div>
 
           <div className="rounded-2xl border border-zinc-100 p-8">
-            <h3 className="font-bold text-lg text-zinc-900 mb-2">Works Where Your Clients Already Text</h3>
+            <h3 className="font-bold text-lg text-zinc-900 mb-2">Meets Clients Where They Book</h3>
             <p className="text-zinc-500 text-sm leading-relaxed mb-6">
-              A dedicated SMS number and a connected Instagram account, both covered from day one. Turn on whichever your clients use most.
+              A booking page with an AI chat assistant, a tap-to-call number for clients who prefer a person, and a confirmation text once you approve a time.
             </p>
             <div className="rounded-xl bg-zinc-50 p-4 space-y-2">
               <div className="flex justify-between items-center bg-white rounded-lg px-3 py-2.5 border border-zinc-100">
-                <span className="text-xs text-zinc-700">💬 SMS</span>
+                <span className="text-xs text-zinc-700">💬 AI chat on your booking page</span>
                 <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
                 </span>
               </div>
               <div className="flex justify-between items-center bg-white rounded-lg px-3 py-2.5 border border-zinc-100">
-                <span className="text-xs text-zinc-700">📷 Instagram DMs</span>
+                <span className="text-xs text-zinc-700">📞 Tap-to-call</span>
                 <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Connected
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Ready
                 </span>
               </div>
             </div>
